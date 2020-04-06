@@ -34,7 +34,7 @@
         <meta name="lang:search.tokenizer" content="[\s\-]+">
       
       <link rel="shortcut icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.0.4, mkdocs-material-4.6.0">
+      <meta name="generator" content="mkdocs-1.1, mkdocs-material-4.6.3">
     
     
       
@@ -42,7 +42,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/application.1b62728e.css">
+      <link rel="stylesheet" href="../assets/stylesheets/application.adb8469c.css">
       
         <link rel="stylesheet" href="../assets/stylesheets/application-palette.a8b3c06d.css">
       
@@ -53,7 +53,7 @@
       
     
     
-      <script src="../assets/javascripts/modernizr.268332fc.js"></script>
+      <script src="../assets/javascripts/modernizr.86422ebf.js"></script>
     
     
       
@@ -87,7 +87,7 @@
     <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
     <label class="md-overlay" data-md-component="overlay" for="__drawer"></label>
     
-      <a href="#advanced" tabindex="1" class="md-skip">
+      <a href="#advanced" tabindex="0" class="md-skip">
         Skip to content
       </a>
     
@@ -96,7 +96,7 @@
   <nav class="md-header-nav md-grid">
     <div class="md-flex">
       <div class="md-flex__cell md-flex__cell--shrink">
-        <a href=".." title="flumine" class="md-header-nav__button md-logo">
+        <a href=".." title="flumine" aria-label="flumine" class="md-header-nav__button md-logo">
           
             <i class="md-icon"></i>
           
@@ -127,7 +127,7 @@
   <label class="md-search__overlay" for="__search"></label>
   <div class="md-search__inner" role="search">
     <form class="md-search__form" name="search">
-      <input type="text" class="md-search__input" name="query" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="query" data-md-state="active">
+      <input type="text" class="md-search__input" aria-label="search" name="query" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="query" data-md-state="active">
       <label class="md-icon md-search__icon" for="__search"></label>
       <button type="reset" class="md-icon md-search__icon" data-md-component="reset" tabindex="-1">
         &#xE5CD;
@@ -275,9 +275,110 @@
     <ul class="md-nav__list" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#trading-client" class="md-nav__link">
-    Trading Client
+  <a href="#flumine" class="md-nav__link">
+    Flumine
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#base-strategy" class="md-nav__link">
+    Base Strategy
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parameters" class="md-nav__link">
+    Parameters
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#functions" class="md-nav__link">
+    Functions
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#client" class="md-nav__link">
+    Client
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#betfair-client" class="md-nav__link">
+    Betfair Client
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#backtest-client" class="md-nav__link">
+    Backtest Client
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#execution" class="md-nav__link">
+    Execution
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#betfair-execution" class="md-nav__link">
+    Betfair Execution
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#backtest-execution" class="md-nav__link">
+    Backtest Execution
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#markets" class="md-nav__link">
+    Markets
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#middleware" class="md-nav__link">
+    Middleware
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -286,12 +387,73 @@
     Streams
   </a>
   
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#market-stream" class="md-nav__link">
+    Market Stream
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data-stream" class="md-nav__link">
+    Data Stream
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#historical-stream" class="md-nav__link">
+    Historical Stream
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#order-stream" class="md-nav__link">
+    Order Stream
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-stream" class="md-nav__link">
+    Custom Stream
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
   <a href="#trading-controls" class="md-nav__link">
     Trading Controls
   </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#client-controls" class="md-nav__link">
+    Client Controls
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#trading-controls_1" class="md-nav__link">
+    Trading Controls
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -319,27 +481,6 @@
         <li class="md-nav__item">
   <a href="#logging" class="md-nav__link">
     Logging
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#custom-polling-streaming" class="md-nav__link">
-    Custom Polling / Streaming
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#strategies" class="md-nav__link">
-    Strategies
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#flumine" class="md-nav__link">
-    Flumine
   </a>
   
 </li>
@@ -400,9 +541,110 @@
     <ul class="md-nav__list" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#trading-client" class="md-nav__link">
-    Trading Client
+  <a href="#flumine" class="md-nav__link">
+    Flumine
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#base-strategy" class="md-nav__link">
+    Base Strategy
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parameters" class="md-nav__link">
+    Parameters
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#functions" class="md-nav__link">
+    Functions
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#client" class="md-nav__link">
+    Client
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#betfair-client" class="md-nav__link">
+    Betfair Client
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#backtest-client" class="md-nav__link">
+    Backtest Client
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#execution" class="md-nav__link">
+    Execution
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#betfair-execution" class="md-nav__link">
+    Betfair Execution
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#backtest-execution" class="md-nav__link">
+    Backtest Execution
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#markets" class="md-nav__link">
+    Markets
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#middleware" class="md-nav__link">
+    Middleware
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -411,12 +653,73 @@
     Streams
   </a>
   
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#market-stream" class="md-nav__link">
+    Market Stream
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data-stream" class="md-nav__link">
+    Data Stream
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#historical-stream" class="md-nav__link">
+    Historical Stream
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#order-stream" class="md-nav__link">
+    Order Stream
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-stream" class="md-nav__link">
+    Custom Stream
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
   <a href="#trading-controls" class="md-nav__link">
     Trading Controls
   </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#client-controls" class="md-nav__link">
+    Client Controls
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#trading-controls_1" class="md-nav__link">
+    Trading Controls
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -448,27 +751,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#custom-polling-streaming" class="md-nav__link">
-    Custom Polling / Streaming
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#strategies" class="md-nav__link">
-    Strategies
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#flumine" class="md-nav__link">
-    Flumine
-  </a>
-  
-</li>
-      
       
       
       
@@ -487,46 +769,88 @@
                 
                 
                 <h1 id="advanced">Advanced</h1>
-<h3 id="trading-client">Trading Client</h3>
-<p><em>betfairlightweight</em></p>
-<h3 id="streams">Streams</h3>
-<p><em>Market Stream</em></p>
-<p><em>Data Stream</em></p>
-<p><em>Historical Stream</em></p>
-<p><em>Order Stream</em></p>
-<p><em>Custom Stream</em></p>
-<h3 id="trading-controls">Trading Controls</h3>
-<h3 id="logging-controls">Logging Controls</h3>
-<h3 id="background-workers">Background Workers</h3>
-<p>By default flumine adds a keep_alive worker which runs every 1200s to make sure the client is either logged in or kept alive, further workers can be added:</p>
-<div class="codehilite"><pre><span></span><span class="kn">from</span> <span class="nn">flumine.worker</span> <span class="kn">import</span> <span class="n">BackgroundWorker</span>
+<h2 id="flumine">Flumine</h2>
+<p>The Flumine class can be adapted by overriding the following functions:</p>
+<ul>
+<li><code>_process_market_books()</code> called on MarketBook event</li>
+<li><code>_process_raw_data()</code> called on RawData event</li>
+<li><code>_process_end_flumine()</code> called on Flumine termination</li>
+</ul>
+<h2 id="base-strategy">Base Strategy</h2>
+<h3 id="parameters">Parameters</h3>
+<p><code>market_filter</code> Streaming market filter required</p>
+<p><code>market_data_filter</code> Streaming market data filter required</p>
+<p><code>streaming_timeout</code> Streaming timeout, will call snap() on cache every x seconds</p>
+<p><code>conflate_ms</code> Streaming conflate</p>
+<p><code>stream_class</code> MarketStream or RawDataStream</p>
+<p><code>name</code> Strategy name, if None will default to class name</p>
+<p><code>context</code> Dictionary object where any extra data can be stored here such as triggers</p>
+<h3 id="functions">Functions</h3>
+<p>The following functions can be overridden dependant on the strategy:</p>
+<p><code>add()</code> Function called when strategy is added to framework</p>
+<p><code>start()</code> Function called when framework starts</p>
+<p><code>check_market_book()</code> Function called with marketBook, <code>process_market_book</code> is only executed if this returns True</p>
+<p><code>process_market_book()</code> Processes market book updates, called on every update that is received</p>
+<p><code>process_raw_data()</code> As per <code>process_market_book</code> but handles raw data</p>
+<p><code>process_race_card()</code> <em>In development</em></p>
+<p><code>process_orders()</code> <em>In development</em></p>
+<p><code>finish()</code> Function called when framework ends</p>
+<h2 id="client">Client</h2>
+<p>Flumine uses clients to hold betting clients for example BetfairClient requires a betfairlightweight trading client, future work may allow multiple clients / different exchanges. </p>
+<h3 id="betfair-client">Betfair Client</h3>
+<h3 id="backtest-client">Backtest Client</h3>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>It is possible to handle a custom client within a strategy just watch out for blocking the main loop if you make any http requests.</p>
+</div>
+<h2 id="execution">Execution</h2>
+<h3 id="betfair-execution">Betfair Execution</h3>
+<h3 id="backtest-execution">Backtest Execution</h3>
+<h2 id="markets">Markets</h2>
+<p>Stores latest marketBook objects.</p>
+<h3 id="middleware">Middleware</h3>
+<p><strong>In development</strong></p>
+<p>Analytics / historical tick data</p>
+<h2 id="streams">Streams</h2>
+<h3 id="market-stream">Market Stream</h3>
+<p>Flumine handles market streams by taking the parameters provided in the strategies, a strategy will then subscribe to the stream. This means strategies can share streams reducing load or create new if they require different markets or data filter.</p>
+<h3 id="data-stream">Data Stream</h3>
+<p>Similar to Market Streams but the raw streaming data is passed back, this reduces ram/CPU and allows recording of the data for future playback, see the example marketrecorder.py</p>
+<h3 id="historical-stream">Historical Stream</h3>
+<p>This is created on a per market basis when backtesting.</p>
+<h3 id="order-stream">Order Stream</h3>
+<p><em>In development</em></p>
+<h3 id="custom-stream">Custom Stream</h3>
+<p><em>In development</em></p>
+<h2 id="trading-controls">Trading Controls</h2>
+<p><em>In development</em></p>
+<h3 id="client-controls">Client Controls</h3>
+<h3 id="trading-controls_1">Trading Controls</h3>
+<h2 id="logging-controls">Logging Controls</h2>
+<p><em>In development</em></p>
+<h2 id="background-workers">Background Workers</h2>
+<p>By default flumine adds the following workers:</p>
+<ul>
+<li>keep_alive: runs every 1200s to make sure the client is either logged in or kept alive</li>
+<li>market</li>
+</ul>
+<p>Further workers can be added as per:</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">flumine.worker</span> <span class="kn">import</span> <span class="n">BackgroundWorker</span>
 
 <span class="k">def</span> <span class="nf">func</span><span class="p">(</span><span class="n">a</span><span class="p">):</span> <span class="nb">print</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
 
 <span class="n">worker</span> <span class="o">=</span> <span class="n">BackgroundWorker</span><span class="p">(</span>
-    <span class="n">interval</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">function</span><span class="o">=</span><span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;hello&quot;</span><span class="p">,)</span>
+    <span class="n">interval</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">function</span><span class="o">=</span><span class="n">func</span><span class="p">,</span> <span class="n">func_args</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;hello&quot;</span><span class="p">,),</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;print_a&quot;</span>
 <span class="p">)</span>
 
-<span class="n">flumine</span><span class="o">.</span><span class="n">add_worker</span><span class="p">(</span>
+<span class="n">framework</span><span class="o">.</span><span class="n">add_worker</span><span class="p">(</span>
     <span class="n">worker</span>
 <span class="p">)</span>
-</pre></div>
+</code></pre></div>
 
 
-<h3 id="error-handling">Error Handling</h3>
-<h3 id="logging">Logging</h3>
-<h3 id="custom-polling-streaming">Custom Polling / Streaming</h3>
-<h3 id="strategies">Strategies</h3>
-<p>market_filter</p>
-<p>market_data_filter</p>
-<p>context</p>
-<h3 id="flumine">Flumine</h3>
-<p>The Flumine class can be adapted by overriding the following functions:</p>
-<ul>
-<li>_process_market_books called on MarketBook event</li>
-<li>_process_raw_data called on RawData event</li>
-<li>_process_end_flumine called on Flumine termination</li>
-</ul>
+<h2 id="error-handling">Error Handling</h2>
+<h2 id="logging">Logging</h2>
                 
                   
                 
@@ -585,9 +909,9 @@
       <div class="md-footer-copyright">
         
         powered by
-        <a href="https://www.mkdocs.org">MkDocs</a>
+        <a href="https://www.mkdocs.org" target="_blank" rel="noopener">MkDocs</a>
         and
-        <a href="https://squidfunk.github.io/mkdocs-material/">
+        <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
           Material for MkDocs</a>
       </div>
       
@@ -597,9 +921,9 @@
       
     </div>
     
-      <script src="../assets/javascripts/application.808e90bb.js"></script>
+      <script src="../assets/javascripts/application.c33a9706.js"></script>
       
-      <script>app.initialize({version:"1.0.4",url:{base:".."}})</script>
+      <script>app.initialize({version:"1.1",url:{base:".."}})</script>
       
     
   </body>
