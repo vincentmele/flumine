@@ -274,13 +274,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#installation_1" class="md-nav__link">
-    Installation
-  </a>
-  
-</li>
-      
       
       
       
@@ -386,13 +379,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#installation_1" class="md-nav__link">
-    Installation
-  </a>
-  
-</li>
-      
       
       
       
@@ -445,6 +431,7 @@ flūmine
 </code></pre></div>
 
 
+<p>flumine requires Python 3.5+</p>
 <h2 id="setup">setup</h2>
 <p>Get started...</p>
 <div class="codehilite"><pre><span></span><code><span class="kn">import</span> <span class="nn">betfairlightweight</span>
@@ -461,22 +448,46 @@ flūmine
 
 <p>Example strategy:</p>
 <div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">flumine</span> <span class="kn">import</span> <span class="n">BaseStrategy</span>
+<span class="kn">from</span> <span class="nn">flumine.order.trade</span> <span class="kn">import</span> <span class="n">Trade</span>
+<span class="kn">from</span> <span class="nn">flumine.order.order</span> <span class="kn">import</span> <span class="n">LimitOrder</span><span class="p">,</span> <span class="n">OrderStatus</span>
+<span class="kn">from</span> <span class="nn">flumine.markets.market</span> <span class="kn">import</span> <span class="n">Market</span>
 <span class="kn">from</span> <span class="nn">betfairlightweight.filters</span> <span class="kn">import</span> <span class="n">streaming_market_filter</span>
+<span class="kn">from</span> <span class="nn">betfairlightweight.resources</span> <span class="kn">import</span> <span class="n">MarketBook</span>
 
 
 <span class="k">class</span> <span class="nc">ExampleStrategy</span><span class="p">(</span><span class="n">BaseStrategy</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="c1"># subscribe to streams</span>
+    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;starting strategy &#39;ExampleStrategy&#39;&quot;</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">check_market_book</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">market</span><span class="p">,</span> <span class="n">market_book</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">check_market_book</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">market</span><span class="p">:</span> <span class="n">Market</span><span class="p">,</span> <span class="n">market_book</span><span class="p">:</span> <span class="n">MarketBook</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
         <span class="c1"># process_market_book only executed if this returns True</span>
         <span class="k">if</span> <span class="n">market_book</span><span class="o">.</span><span class="n">status</span> <span class="o">!=</span> <span class="s2">&quot;CLOSED&quot;</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">True</span>
 
-    <span class="k">def</span> <span class="nf">process_market_book</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">market</span><span class="p">,</span> <span class="n">market_book</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">process_market_book</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">market</span><span class="p">:</span> <span class="n">Market</span><span class="p">,</span> <span class="n">market_book</span><span class="p">:</span> <span class="n">MarketBook</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># process marketBook object</span>
-        <span class="nb">print</span><span class="p">(</span><span class="n">market_book</span><span class="o">.</span><span class="n">status</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">runner</span> <span class="ow">in</span> <span class="n">market_book</span><span class="o">.</span><span class="n">runners</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">runner</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="s2">&quot;ACTIVE&quot;</span> <span class="ow">and</span> <span class="n">runner</span><span class="o">.</span><span class="n">last_price_traded</span> <span class="o">&lt;</span> <span class="mf">1.5</span><span class="p">:</span>
+                <span class="n">trade</span> <span class="o">=</span> <span class="n">Trade</span><span class="p">(</span>
+                    <span class="n">market_id</span><span class="o">=</span><span class="n">market_book</span><span class="o">.</span><span class="n">market_id</span><span class="p">,</span> 
+                    <span class="n">selection_id</span><span class="o">=</span><span class="n">runner</span><span class="o">.</span><span class="n">selection_id</span><span class="p">,</span> 
+                    <span class="n">strategy</span><span class="o">=</span><span class="bp">self</span>
+                <span class="p">)</span>
+                <span class="n">order</span> <span class="o">=</span> <span class="n">trade</span><span class="o">.</span><span class="n">create_order</span><span class="p">(</span>
+                    <span class="n">side</span><span class="o">=</span><span class="s2">&quot;LAY&quot;</span><span class="p">,</span> 
+                    <span class="n">order_type</span><span class="o">=</span><span class="n">LimitOrder</span><span class="p">(</span><span class="n">price</span><span class="o">=</span><span class="mf">1.01</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mf">2.00</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">place_order</span><span class="p">(</span><span class="n">market</span><span class="p">,</span> <span class="n">order</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">process_orders</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">market</span><span class="p">:</span> <span class="n">Market</span><span class="p">,</span> <span class="n">orders</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">order</span> <span class="ow">in</span> <span class="n">orders</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">order</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="n">OrderStatus</span><span class="o">.</span><span class="n">EXECUTABLE</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">order</span><span class="o">.</span><span class="n">size_remaining</span> <span class="o">==</span> <span class="mf">2.00</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">cancel_order</span><span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">)</span>  <span class="c1"># reduce size to 1.98</span>
+                <span class="k">if</span> <span class="n">order</span><span class="o">.</span><span class="n">order_type</span><span class="o">.</span><span class="n">persistence_type</span> <span class="o">==</span> <span class="s1">&#39;LAPSE&#39;</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">update_order</span><span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="s1">&#39;PERSIST&#39;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">order</span><span class="o">.</span><span class="n">size_remaining</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">replace_order</span><span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="mf">1.02</span><span class="p">)</span>  <span class="c1"># move</span>
 
 
 <span class="n">strategy</span> <span class="o">=</span> <span class="n">ExampleStrategy</span><span class="p">(</span>
@@ -505,7 +516,7 @@ flūmine
 <ul>
 <li>Streaming</li>
 <li>Multiple strategies</li>
-<li>Order execution (in development)</li>
+<li>Order execution</li>
 <li>Paper trading (in development)</li>
 <li>Back testing (in development)</li>
 <li>Analytics (in development)</li>
@@ -514,17 +525,11 @@ flūmine
 <h2 id="dependencies">Dependencies</h2>
 <p>flumine relies on these libraries:</p>
 <ul>
-<li><code>betfairlightweight</code> - Betfair API support.</li>
-<li><code>tenacity</code> - Used for connection retrying (streaming).</li>
-<li><code>python-json-logger</code> - JSON logging.</li>
+<li><code>betfairlightweight</code> - Betfair API support</li>
+<li><code>tenacity</code> - Used for connection retrying (streaming)</li>
+<li><code>python-json-logger</code> - JSON logging</li>
+<li><code>requests</code> - HTTP support</li>
 </ul>
-<h2 id="installation_1">Installation</h2>
-<p>Install with pip:</p>
-<div class="codehilite"><pre><span></span><code>$ pip install flumine
-</code></pre></div>
-
-
-<p>flumine requires Python 3.5+</p>
                 
                   
                 

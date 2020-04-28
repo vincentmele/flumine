@@ -485,6 +485,40 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#config" class="md-nav__link">
+    Config
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hostname" class="md-nav__link">
+    hostname
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#process_id" class="md-nav__link">
+    process_id
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#current_time" class="md-nav__link">
+    current_time
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
       
       
       
@@ -751,6 +785,40 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#config" class="md-nav__link">
+    Config
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hostname" class="md-nav__link">
+    hostname
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#process_id" class="md-nav__link">
+    process_id
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#current_time" class="md-nav__link">
+    current_time
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
       
       
       
@@ -774,6 +842,8 @@
 <ul>
 <li><code>_process_market_books()</code> called on MarketBook event</li>
 <li><code>_process_raw_data()</code> called on RawData event</li>
+<li><code>_process_market_catalogues</code> called on MarketCatalogue event</li>
+<li><code>_process_current_orders</code> called on currentOrders event</li>
 <li><code>_process_end_flumine()</code> called on Flumine termination</li>
 </ul>
 <h2 id="base-strategy">Base Strategy</h2>
@@ -831,8 +901,8 @@
 <h2 id="background-workers">Background Workers</h2>
 <p>By default flumine adds the following workers:</p>
 <ul>
-<li>keep_alive: runs every 1200s to make sure the client is either logged in or kept alive</li>
-<li>market</li>
+<li><code>keep_alive</code>: runs every 1200s to make sure the client is either logged in or kept alive</li>
+<li><code>poll_market_catalogue</code>: runs every 60s to poll listMarketCatalogue endpoint</li>
 </ul>
 <p>Further workers can be added as per:</p>
 <div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">flumine.worker</span> <span class="kn">import</span> <span class="n">BackgroundWorker</span>
@@ -851,6 +921,13 @@
 
 <h2 id="error-handling">Error Handling</h2>
 <h2 id="logging">Logging</h2>
+<h2 id="config">Config</h2>
+<h3 id="hostname">hostname</h3>
+<p>Used as customerStrategyRefs so that only orders created by the running instance is returned.</p>
+<h3 id="process_id">process_id</h3>
+<p>OS process id of running application.</p>
+<h3 id="current_time">current_time</h3>
+<p>Used for backtesting</p>
                 
                   
                 
