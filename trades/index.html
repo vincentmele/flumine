@@ -38,7 +38,7 @@
     
     
       
-        <title>Help - flumine</title>
+        <title>Trades / Orders - flumine</title>
       
     
     
@@ -87,7 +87,7 @@
     <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
     <label class="md-overlay" data-md-component="overlay" for="__drawer"></label>
     
-      <a href="#help" tabindex="0" class="md-skip">
+      <a href="#trades-orders" tabindex="0" class="md-skip">
         Skip to content
       </a>
     
@@ -113,7 +113,7 @@
             </span>
             <span class="md-header-nav__topic">
               
-                Help
+                Trades / Orders
               
             </span>
           
@@ -270,11 +270,90 @@
       
       
 
+  
 
-  <li class="md-nav__item">
-    <a href="../trades/" title="Trades / Orders" class="md-nav__link">
+
+  <li class="md-nav__item md-nav__item--active">
+    
+    <input class="md-toggle md-nav__toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+    
+      
+    
+    
+      <label class="md-nav__link md-nav__link--active" for="__toc">
+        Trades / Orders
+      </label>
+    
+    <a href="./" title="Trades / Orders" class="md-nav__link md-nav__link--active">
       Trades / Orders
     </a>
+    
+      
+<nav class="md-nav md-nav--secondary">
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">Table of contents</label>
+    <ul class="md-nav__list" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#trade" class="md-nav__link">
+    Trade
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#offset-orders" class="md-nav__link">
+    offset orders
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fill-kill" class="md-nav__link">
+    fill kill
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#greening" class="md-nav__link">
+    greening
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom" class="md-nav__link">
+    custom
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#order" class="md-nav__link">
+    Order
+  </a>
+  
+</li>
+      
+      
+      
+      
+      
+    </ul>
+  
+</nav>
+    
   </li>
 
     
@@ -306,20 +385,11 @@
       
       
 
-  
 
-
-  <li class="md-nav__item md-nav__item--active">
-    
-    <input class="md-toggle md-nav__toggle" data-md-toggle="toc" type="checkbox" id="__toc">
-    
-      
-    
-    
-    <a href="./" title="Help" class="md-nav__link md-nav__link--active">
+  <li class="md-nav__item">
+    <a href="../help/" title="Help" class="md-nav__link">
       Help
     </a>
-    
   </li>
 
     
@@ -340,6 +410,63 @@
     
   
   
+    <label class="md-nav__title" for="__toc">Table of contents</label>
+    <ul class="md-nav__list" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#trade" class="md-nav__link">
+    Trade
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#offset-orders" class="md-nav__link">
+    offset orders
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fill-kill" class="md-nav__link">
+    fill kill
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#greening" class="md-nav__link">
+    greening
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom" class="md-nav__link">
+    custom
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#order" class="md-nav__link">
+    Order
+  </a>
+  
+</li>
+      
+      
+      
+      
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -351,13 +478,54 @@
               
                 
                 
-                <h1 id="help">Help</h1>
-<p>Please try the following channels for any support:</p>
-<ul>
-<li><a href="https://docs.developer.betfair.com/display/1smk3cen4v3lu3yomq5qye0ni/Developer+Support">Betfair Developer Support</a></li>
-<li><a href="https://betfairlightweight.herokuapp.com">Slack Group</a> for any help in using the library</li>
-<li><a href="https://status.developer.betfair.com/">API Status</a> if things don't seem to be working</li>
-</ul>
+                <h1 id="trades-orders">Trades / Orders</h1>
+<h2 id="trade">Trade</h2>
+<p>A trade object is used to handle order execution.</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">flumine.order.trade</span> <span class="kn">import</span> <span class="n">Trade</span>
+<span class="kn">from</span> <span class="nn">flumine.order.ordertype</span> <span class="kn">import</span> <span class="n">LimitOrder</span>
+
+<span class="n">trade</span> <span class="o">=</span> <span class="n">Trade</span><span class="p">(</span>
+    <span class="n">market_id</span><span class="o">=</span><span class="s2">&quot;1.2345678&quot;</span><span class="p">,</span>
+    <span class="n">selection_id</span><span class="o">=</span><span class="mi">123456</span><span class="p">,</span>
+    <span class="n">handicap</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="n">strategy</span>
+<span class="p">)</span>
+<span class="n">trade</span><span class="o">.</span><span class="n">orders</span>  <span class="c1"># []</span>
+<span class="n">trade</span><span class="o">.</span><span class="n">status</span>  <span class="c1"># todo</span>
+
+<span class="n">order</span> <span class="o">=</span> <span class="n">trade</span><span class="o">.</span><span class="n">create_order</span><span class="p">(</span>
+    <span class="n">side</span><span class="o">=</span><span class="s2">&quot;LAY&quot;</span><span class="p">,</span>
+    <span class="n">order_type</span><span class="o">=</span><span class="n">LimitOrder</span><span class="p">(</span><span class="n">price</span><span class="o">=</span><span class="mf">1.01</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mf">2.00</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="n">trade</span><span class="o">.</span><span class="n">orders</span>  <span class="c1"># [&lt;BetfairOrder&gt;]</span>
+</code></pre></div>
+
+
+<p>Extras include:</p>
+<h3 id="offset-orders">offset orders</h3>
+<p>desc</p>
+<div class="codehilite"><pre><span></span><code><span class="n">example</span>
+</code></pre></div>
+
+
+<h3 id="fill-kill">fill kill</h3>
+<h3 id="greening">greening</h3>
+<h3 id="custom">custom</h3>
+<p>You can create your own trade classes and then handle the logic within the <code>strategy.process_orders</code> function.</p>
+<h2 id="order">Order</h2>
+<p>Order objects store all order data locally allowing trade logic to be applied.</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">flumine.order.order</span> <span class="kn">import</span> <span class="n">BetfairOrder</span><span class="p">,</span> <span class="n">LimitOrder</span>
+
+<span class="n">order</span> <span class="o">=</span> <span class="n">BetfairOrder</span><span class="p">(</span>
+    <span class="n">trade</span><span class="o">=</span><span class="n">trade</span><span class="p">,</span>
+    <span class="n">side</span><span class="o">=</span><span class="s2">&quot;LAY&quot;</span><span class="p">,</span>
+    <span class="n">order_type</span><span class="o">=</span><span class="n">LimitOrder</span><span class="p">(</span><span class="n">price</span><span class="o">=</span><span class="mf">1.01</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mf">2.00</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">order</span><span class="o">.</span><span class="n">status</span>  <span class="c1"># OrderStatus.PENDING</span>
+<span class="n">order</span><span class="o">.</span><span class="n">executable</span><span class="p">()</span>
+<span class="n">order</span><span class="o">.</span><span class="n">execution_complete</span><span class="p">()</span>
+</code></pre></div>
                 
                   
                 
@@ -379,7 +547,7 @@
     <div class="md-footer-nav">
       <nav class="md-footer-nav__inner md-grid">
         
-          <a href="../design/" title="Design" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
+          <a href="../execution/" title="Clients / Execution" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
             <div class="md-flex__cell md-flex__cell--shrink">
               <i class="md-icon md-icon--arrow-back md-footer-nav__button"></i>
             </div>
@@ -388,11 +556,25 @@
                 <span class="md-footer-nav__direction">
                   Previous
                 </span>
-                Design
+                Clients / Execution
               </span>
             </div>
           </a>
         
+        
+          <a href="../advanced/" title="Advanced Usage" class="md-flex md-footer-nav__link md-footer-nav__link--next" rel="next">
+            <div class="md-flex__cell md-flex__cell--stretch md-footer-nav__title">
+              <span class="md-flex__ellipsis">
+                <span class="md-footer-nav__direction">
+                  Next
+                </span>
+                Advanced Usage
+              </span>
+            </div>
+            <div class="md-flex__cell md-flex__cell--shrink">
+              <i class="md-icon md-icon--arrow-forward md-footer-nav__button"></i>
+            </div>
+          </a>
         
       </nav>
     </div>

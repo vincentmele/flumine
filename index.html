@@ -303,6 +303,42 @@
 
 
   <li class="md-nav__item">
+    <a href="markets/" title="Markets" class="md-nav__link">
+      Markets
+    </a>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item">
+    <a href="execution/" title="Clients / Execution" class="md-nav__link">
+      Clients / Execution
+    </a>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item">
+    <a href="trades/" title="Trades / Orders" class="md-nav__link">
+      Trades / Orders
+    </a>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item">
     <a href="advanced/" title="Advanced Usage" class="md-nav__link">
       Advanced Usage
     </a>
@@ -423,7 +459,7 @@ flūmine
 <li>rock-solid</li>
 <li>safe</li>
 </ul>
-<p>Support for market and custom streaming data (order, score and custom polling data in development)</p>
+<p>Support for market, order and custom streaming data.</p>
 <p><a href="https://betfairlightweight.herokuapp.com">join slack group</a></p>
 <p>Currently tested on Python 3.5, 3.6, 3.7 and 3.8.</p>
 <h2 id="installation">installation</h2>
@@ -469,13 +505,13 @@ flūmine
         <span class="k">for</span> <span class="n">runner</span> <span class="ow">in</span> <span class="n">market_book</span><span class="o">.</span><span class="n">runners</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">runner</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="s2">&quot;ACTIVE&quot;</span> <span class="ow">and</span> <span class="n">runner</span><span class="o">.</span><span class="n">last_price_traded</span> <span class="o">&lt;</span> <span class="mf">1.5</span><span class="p">:</span>
                 <span class="n">trade</span> <span class="o">=</span> <span class="n">Trade</span><span class="p">(</span>
-                    <span class="n">market_id</span><span class="o">=</span><span class="n">market_book</span><span class="o">.</span><span class="n">market_id</span><span class="p">,</span> 
-                    <span class="n">selection_id</span><span class="o">=</span><span class="n">runner</span><span class="o">.</span><span class="n">selection_id</span><span class="p">,</span> 
-                    <span class="n">strategy</span><span class="o">=</span><span class="bp">self</span>
+                    <span class="n">market_id</span><span class="o">=</span><span class="n">market_book</span><span class="o">.</span><span class="n">market_id</span><span class="p">,</span>
+                    <span class="n">selection_id</span><span class="o">=</span><span class="n">runner</span><span class="o">.</span><span class="n">selection_id</span><span class="p">,</span>
+                    <span class="n">handicap</span><span class="o">=</span><span class="n">runner</span><span class="o">.</span><span class="n">handicap</span><span class="p">,</span>
+                    <span class="n">strategy</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
                 <span class="p">)</span>
                 <span class="n">order</span> <span class="o">=</span> <span class="n">trade</span><span class="o">.</span><span class="n">create_order</span><span class="p">(</span>
-                    <span class="n">side</span><span class="o">=</span><span class="s2">&quot;LAY&quot;</span><span class="p">,</span> 
-                    <span class="n">order_type</span><span class="o">=</span><span class="n">LimitOrder</span><span class="p">(</span><span class="n">price</span><span class="o">=</span><span class="mf">1.01</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mf">2.00</span><span class="p">)</span>
+                    <span class="n">side</span><span class="o">=</span><span class="s2">&quot;LAY&quot;</span><span class="p">,</span> <span class="n">order_type</span><span class="o">=</span><span class="n">LimitOrder</span><span class="p">(</span><span class="n">price</span><span class="o">=</span><span class="mf">1.01</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mf">2.00</span><span class="p">)</span>
                 <span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">place_order</span><span class="p">(</span><span class="n">market</span><span class="p">,</span> <span class="n">order</span><span class="p">)</span>
 
@@ -484,8 +520,8 @@ flūmine
             <span class="k">if</span> <span class="n">order</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="n">OrderStatus</span><span class="o">.</span><span class="n">EXECUTABLE</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">order</span><span class="o">.</span><span class="n">size_remaining</span> <span class="o">==</span> <span class="mf">2.00</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">cancel_order</span><span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">)</span>  <span class="c1"># reduce size to 1.98</span>
-                <span class="k">if</span> <span class="n">order</span><span class="o">.</span><span class="n">order_type</span><span class="o">.</span><span class="n">persistence_type</span> <span class="o">==</span> <span class="s1">&#39;LAPSE&#39;</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">update_order</span><span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="s1">&#39;PERSIST&#39;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">order</span><span class="o">.</span><span class="n">order_type</span><span class="o">.</span><span class="n">persistence_type</span> <span class="o">==</span> <span class="s2">&quot;LAPSE&quot;</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">update_order</span><span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="s2">&quot;PERSIST&quot;</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">order</span><span class="o">.</span><span class="n">size_remaining</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">replace_order</span><span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="mf">1.02</span><span class="p">)</span>  <span class="c1"># move</span>
 
@@ -517,10 +553,10 @@ flūmine
 <li>Streaming</li>
 <li>Multiple strategies</li>
 <li>Order execution</li>
-<li>Paper trading (in development)</li>
 <li>Back testing (in development)</li>
+<li>Paper trading (on roadmap)</li>
 <li>Analytics (in development)</li>
-<li>Scores / RaceCard / InPlayService (in development)</li>
+<li>Scores / RaceCard / InPlayService (on roadmap)</li>
 </ul>
 <h2 id="dependencies">Dependencies</h2>
 <p>flumine relies on these libraries:</p>

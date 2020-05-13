@@ -38,7 +38,7 @@
     
     
       
-        <title>Help - flumine</title>
+        <title>Clients / Execution - flumine</title>
       
     
     
@@ -87,7 +87,7 @@
     <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
     <label class="md-overlay" data-md-component="overlay" for="__drawer"></label>
     
-      <a href="#help" tabindex="0" class="md-skip">
+      <a href="#clients-execution" tabindex="0" class="md-skip">
         Skip to content
       </a>
     
@@ -113,7 +113,7 @@
             </span>
             <span class="md-header-nav__topic">
               
-                Help
+                Clients / Execution
               
             </span>
           
@@ -258,11 +258,63 @@
       
       
 
+  
 
-  <li class="md-nav__item">
-    <a href="../execution/" title="Clients / Execution" class="md-nav__link">
+
+  <li class="md-nav__item md-nav__item--active">
+    
+    <input class="md-toggle md-nav__toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+    
+      
+    
+    
+      <label class="md-nav__link md-nav__link--active" for="__toc">
+        Clients / Execution
+      </label>
+    
+    <a href="./" title="Clients / Execution" class="md-nav__link md-nav__link--active">
       Clients / Execution
     </a>
+    
+      
+<nav class="md-nav md-nav--secondary">
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">Table of contents</label>
+    <ul class="md-nav__list" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#live-betfair" class="md-nav__link">
+    Live - Betfair
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#simulated" class="md-nav__link">
+    Simulated
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#custom" class="md-nav__link">
+    Custom
+  </a>
+  
+</li>
+      
+      
+      
+      
+      
+    </ul>
+  
+</nav>
+    
   </li>
 
     
@@ -306,20 +358,11 @@
       
       
 
-  
 
-
-  <li class="md-nav__item md-nav__item--active">
-    
-    <input class="md-toggle md-nav__toggle" data-md-toggle="toc" type="checkbox" id="__toc">
-    
-      
-    
-    
-    <a href="./" title="Help" class="md-nav__link md-nav__link--active">
+  <li class="md-nav__item">
+    <a href="../help/" title="Help" class="md-nav__link">
       Help
     </a>
-    
   </li>
 
     
@@ -340,6 +383,36 @@
     
   
   
+    <label class="md-nav__title" for="__toc">Table of contents</label>
+    <ul class="md-nav__list" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#live-betfair" class="md-nav__link">
+    Live - Betfair
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#simulated" class="md-nav__link">
+    Simulated
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#custom" class="md-nav__link">
+    Custom
+  </a>
+  
+</li>
+      
+      
+      
+      
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -351,13 +424,72 @@
               
                 
                 
-                <h1 id="help">Help</h1>
-<p>Please try the following channels for any support:</p>
+                <h1 id="clients-execution">Clients / Execution</h1>
+<h2 id="live-betfair">Live - Betfair</h2>
+<p>When using the <code>BetfairClient</code> flumine will default to using the integrated <code>BetfairExecution</code> class, this class can handle:</p>
 <ul>
-<li><a href="https://docs.developer.betfair.com/display/1smk3cen4v3lu3yomq5qye0ni/Developer+Support">Betfair Developer Support</a></li>
-<li><a href="https://betfairlightweight.herokuapp.com">Slack Group</a> for any help in using the library</li>
-<li><a href="https://status.developer.betfair.com/">API Status</a> if things don't seem to be working</li>
+<li><code>placeOrders</code></li>
+<li><code>cancelOrders</code></li>
+<li><code>updateOrders</code></li>
+<li><code>replaceOrders</code></li>
 </ul>
+<h2 id="simulated">Simulated</h2>
+<p>The <code>BacktestClient</code> will use the <code>SimulatedExecution</code> class and can be used for backtesting or paper trading where order matching is handled locally.</p>
+<p>In development.</p>
+<h2 id="custom">Custom</h2>
+<p>Custom execution can be applied by creating your own client/overriding the <code>add_execution</code> function like so:</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">flumine.execution.baseexecution</span> <span class="kn">import</span> <span class="n">BaseExecution</span>
+<span class="kn">from</span> <span class="nn">flumine.clients.baseclient</span> <span class="kn">import</span> <span class="n">BaseClient</span>
+
+
+<span class="k">class</span> <span class="nc">PrinterExecution</span><span class="p">(</span><span class="n">BaseExecution</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">execute_place</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">order_package</span><span class="p">,</span> <span class="n">http_session</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;execute_place&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">execute_cancel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">order_package</span><span class="p">,</span> <span class="n">http_session</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;execute_cancel&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">execute_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">order_package</span><span class="p">,</span> <span class="n">http_session</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;execute_update&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">execute_replace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">order_package</span><span class="p">,</span> <span class="n">http_session</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;execute_replace&quot;</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">PrinterClient</span><span class="p">(</span><span class="n">BaseClient</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">login</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span>
+
+    <span class="k">def</span> <span class="nf">keep_alive</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span>
+
+    <span class="k">def</span> <span class="nf">logout</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span>
+
+    <span class="k">def</span> <span class="nf">add_execution</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">flumine</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">execution</span> <span class="o">=</span> <span class="n">PrinterExecution</span><span class="p">(</span><span class="n">flumine</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">min_bet_size</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="mf">2.0</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">min_bet_payout</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="mf">10.0</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">min_bsp_liability</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="mf">10.0</span>
+
+
+<span class="n">client</span> <span class="o">=</span> <span class="n">PrinterClient</span><span class="p">()</span>
+</code></pre></div>
+
+
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>This can be used to handle other exchanges (betdaq) or API's that flumine cannot currently handle.</p>
+</div>
                 
                   
                 
@@ -379,7 +511,7 @@
     <div class="md-footer-nav">
       <nav class="md-footer-nav__inner md-grid">
         
-          <a href="../design/" title="Design" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
+          <a href="../markets/" title="Markets" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
             <div class="md-flex__cell md-flex__cell--shrink">
               <i class="md-icon md-icon--arrow-back md-footer-nav__button"></i>
             </div>
@@ -388,11 +520,25 @@
                 <span class="md-footer-nav__direction">
                   Previous
                 </span>
-                Design
+                Markets
               </span>
             </div>
           </a>
         
+        
+          <a href="../trades/" title="Trades / Orders" class="md-flex md-footer-nav__link md-footer-nav__link--next" rel="next">
+            <div class="md-flex__cell md-flex__cell--stretch md-footer-nav__title">
+              <span class="md-flex__ellipsis">
+                <span class="md-footer-nav__direction">
+                  Next
+                </span>
+                Trades / Orders
+              </span>
+            </div>
+            <div class="md-flex__cell md-flex__cell--shrink">
+              <i class="md-icon md-icon--arrow-forward md-footer-nav__button"></i>
+            </div>
+          </a>
         
       </nav>
     </div>

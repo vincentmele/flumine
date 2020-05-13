@@ -246,6 +246,42 @@
       
       
 
+
+  <li class="md-nav__item">
+    <a href="../markets/" title="Markets" class="md-nav__link">
+      Markets
+    </a>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item">
+    <a href="../execution/" title="Clients / Execution" class="md-nav__link">
+      Clients / Execution
+    </a>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item">
+    <a href="../trades/" title="Trades / Orders" class="md-nav__link">
+      Trades / Orders
+    </a>
+  </li>
+
+    
+      
+      
+      
+
   
 
 
@@ -299,80 +335,6 @@
           <li class="md-nav__item">
   <a href="#functions" class="md-nav__link">
     Functions
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#client" class="md-nav__link">
-    Client
-  </a>
-  
-    <nav class="md-nav">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#betfair-client" class="md-nav__link">
-    Betfair Client
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#backtest-client" class="md-nav__link">
-    Backtest Client
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#execution" class="md-nav__link">
-    Execution
-  </a>
-  
-    <nav class="md-nav">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#betfair-execution" class="md-nav__link">
-    Betfair Execution
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#backtest-execution" class="md-nav__link">
-    Backtest Execution
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#markets" class="md-nav__link">
-    Markets
-  </a>
-  
-    <nav class="md-nav">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#middleware" class="md-nav__link">
-    Middleware
   </a>
   
 </li>
@@ -609,80 +571,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#client" class="md-nav__link">
-    Client
-  </a>
-  
-    <nav class="md-nav">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#betfair-client" class="md-nav__link">
-    Betfair Client
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#backtest-client" class="md-nav__link">
-    Backtest Client
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#execution" class="md-nav__link">
-    Execution
-  </a>
-  
-    <nav class="md-nav">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#betfair-execution" class="md-nav__link">
-    Betfair Execution
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#backtest-execution" class="md-nav__link">
-    Backtest Execution
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#markets" class="md-nav__link">
-    Markets
-  </a>
-  
-    <nav class="md-nav">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#middleware" class="md-nav__link">
-    Middleware
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#streams" class="md-nav__link">
     Streams
   </a>
@@ -865,22 +753,6 @@
 <p><code>process_race_card()</code> <em>In development</em></p>
 <p><code>process_orders()</code> <em>In development</em></p>
 <p><code>finish()</code> Function called when framework ends</p>
-<h2 id="client">Client</h2>
-<p>Flumine uses clients to hold betting clients for example BetfairClient requires a betfairlightweight trading client, future work may allow multiple clients / different exchanges. </p>
-<h3 id="betfair-client">Betfair Client</h3>
-<h3 id="backtest-client">Backtest Client</h3>
-<div class="admonition tip">
-<p class="admonition-title">Tip</p>
-<p>It is possible to handle a custom client within a strategy just watch out for blocking the main loop if you make any http requests.</p>
-</div>
-<h2 id="execution">Execution</h2>
-<h3 id="betfair-execution">Betfair Execution</h3>
-<h3 id="backtest-execution">Backtest Execution</h3>
-<h2 id="markets">Markets</h2>
-<p>Stores latest marketBook objects.</p>
-<h3 id="middleware">Middleware</h3>
-<p><strong>In development</strong></p>
-<p>Analytics / historical tick data</p>
 <h2 id="streams">Streams</h2>
 <h3 id="market-stream">Market Stream</h3>
 <p>Flumine handles market streams by taking the parameters provided in the strategies, a strategy will then subscribe to the stream. This means strategies can share streams reducing load or create new if they require different markets or data filter.</p>
@@ -949,7 +821,7 @@
     <div class="md-footer-nav">
       <nav class="md-footer-nav__inner md-grid">
         
-          <a href="../quickstart/" title="QuickStart" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
+          <a href="../trades/" title="Trades / Orders" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
             <div class="md-flex__cell md-flex__cell--shrink">
               <i class="md-icon md-icon--arrow-back md-footer-nav__button"></i>
             </div>
@@ -958,7 +830,7 @@
                 <span class="md-footer-nav__direction">
                   Previous
                 </span>
-                QuickStart
+                Trades / Orders
               </span>
             </div>
           </a>

@@ -38,7 +38,7 @@
     
     
       
-        <title>Help - flumine</title>
+        <title>Markets - flumine</title>
       
     
     
@@ -87,7 +87,7 @@
     <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
     <label class="md-overlay" data-md-component="overlay" for="__drawer"></label>
     
-      <a href="#help" tabindex="0" class="md-skip">
+      <a href="#markets" tabindex="0" class="md-skip">
         Skip to content
       </a>
     
@@ -113,7 +113,7 @@
             </span>
             <span class="md-header-nav__topic">
               
-                Help
+                Markets
               
             </span>
           
@@ -246,11 +246,62 @@
       
       
 
+  
 
-  <li class="md-nav__item">
-    <a href="../markets/" title="Markets" class="md-nav__link">
+
+  <li class="md-nav__item md-nav__item--active">
+    
+    <input class="md-toggle md-nav__toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+    
+      
+    
+    
+      <label class="md-nav__link md-nav__link--active" for="__toc">
+        Markets
+      </label>
+    
+    <a href="./" title="Markets" class="md-nav__link md-nav__link--active">
       Markets
     </a>
+    
+      
+<nav class="md-nav md-nav--secondary">
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">Table of contents</label>
+    <ul class="md-nav__list" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#market" class="md-nav__link">
+    Market
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#middleware" class="md-nav__link">
+    Middleware
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+      
+      
+      
+      
+    </ul>
+  
+</nav>
+    
   </li>
 
     
@@ -306,20 +357,11 @@
       
       
 
-  
 
-
-  <li class="md-nav__item md-nav__item--active">
-    
-    <input class="md-toggle md-nav__toggle" data-md-toggle="toc" type="checkbox" id="__toc">
-    
-      
-    
-    
-    <a href="./" title="Help" class="md-nav__link md-nav__link--active">
+  <li class="md-nav__item">
+    <a href="../help/" title="Help" class="md-nav__link">
       Help
     </a>
-    
   </li>
 
     
@@ -340,6 +382,35 @@
     
   
   
+    <label class="md-nav__title" for="__toc">Table of contents</label>
+    <ul class="md-nav__list" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#market" class="md-nav__link">
+    Market
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#middleware" class="md-nav__link">
+    Middleware
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+      
+      
+      
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -351,13 +422,19 @@
               
                 
                 
-                <h1 id="help">Help</h1>
-<p>Please try the following channels for any support:</p>
-<ul>
-<li><a href="https://docs.developer.betfair.com/display/1smk3cen4v3lu3yomq5qye0ni/Developer+Support">Betfair Developer Support</a></li>
-<li><a href="https://betfairlightweight.herokuapp.com">Slack Group</a> for any help in using the library</li>
-<li><a href="https://status.developer.betfair.com/">API Status</a> if things don't seem to be working</li>
-</ul>
+                <h1 id="markets">Markets</h1>
+<h2 id="market">Market</h2>
+<p>Within markets you have market objects which contains current up to date market data.</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">flumine.order.trade</span> <span class="kn">import</span> <span class="n">Trade</span>
+<span class="kn">from</span> <span class="nn">flumine.order.ordertype</span> <span class="kn">import</span> <span class="n">LimitOrder</span>
+
+<span class="n">market</span>
+</code></pre></div>
+
+
+<h3 id="middleware">Middleware</h3>
+<p><strong>In development</strong></p>
+<p>Analytics / historical tick data</p>
                 
                   
                 
@@ -379,7 +456,7 @@
     <div class="md-footer-nav">
       <nav class="md-footer-nav__inner md-grid">
         
-          <a href="../design/" title="Design" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
+          <a href="../quickstart/" title="QuickStart" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
             <div class="md-flex__cell md-flex__cell--shrink">
               <i class="md-icon md-icon--arrow-back md-footer-nav__button"></i>
             </div>
@@ -388,11 +465,25 @@
                 <span class="md-footer-nav__direction">
                   Previous
                 </span>
-                Design
+                QuickStart
               </span>
             </div>
           </a>
         
+        
+          <a href="../execution/" title="Clients / Execution" class="md-flex md-footer-nav__link md-footer-nav__link--next" rel="next">
+            <div class="md-flex__cell md-flex__cell--stretch md-footer-nav__title">
+              <span class="md-flex__ellipsis">
+                <span class="md-footer-nav__direction">
+                  Next
+                </span>
+                Clients / Execution
+              </span>
+            </div>
+            <div class="md-flex__cell md-flex__cell--shrink">
+              <i class="md-icon md-icon--arrow-forward md-footer-nav__button"></i>
+            </div>
+          </a>
         
       </nav>
     </div>
