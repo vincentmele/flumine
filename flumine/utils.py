@@ -1,8 +1,12 @@
 import uuid
 import logging
 import hashlib
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Callable
 from decimal import Decimal
+from betfairlightweight.resources.bettingresources import RunnerBook
+
+from . import config
+from .exceptions import FlumineException
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +96,17 @@ def get_size(data: list, level: int) -> Optional[float]:
         return
 
 
+def get_sp(runner: RunnerBook) -> Optional[float]:
+    if isinstance(runner.sp, list):
+        return
+    elif runner.sp is None:
+        return
+    elif runner.sp.actual_sp == "NaN":
+        return
+    else:
+        return runner.sp.actual_sp
+
+
 def price_ticks_away(price: float, n_ticks: int) -> float:
     try:
         price_index = PRICES.index(as_dec(price))
@@ -108,11 +123,12 @@ def calculate_exposure(mb: list, ml: list) -> int:
     of (price, size)
     """
     back_exp = sum(-i[1] for i in mb)
-    back_profit = sum(i[0] * i[1] for i in mb)
+    back_profit = sum((i[0] - 1) * i[1] for i in mb)
     lay_exp = sum((i[0] - 1) * -i[1] for i in ml)
-    if lay_exp:
-        lay_exp += back_profit
-    return min(round(back_exp + lay_exp, 2), 0)  # returns negative int
+    lay_profit = sum(i[1] for i in ml)
+    _win = back_profit + lay_exp
+    _lose = lay_profit + back_exp
+    return round(min(_win, _lose), 2)
 
 
 # todo LRU cache?
@@ -127,3 +143,44 @@ def wap(matched: list) -> Tuple[float, float]:
         return 0, 0
     else:
         return round(b, 2), round(a / b, 2)
+
+
+def call_check_market(strategy_check_market: Callable, market, market_book) -> bool:
+    try:
+        return strategy_check_market(market, market_book)
+    except FlumineException as e:
+        logger.error(
+            "FlumineException %s in strategy_check_market %s %s"
+            % (e, strategy_check_market, market.market_id),
+            exc_info=True,
+        )
+    except Exception as e:
+        logger.critical(
+            "Unknown error %s in strategy_check_market %s %s"
+            % (e, strategy_check_market, market.market_id),
+            exc_info=True,
+        )
+        if config.raise_errors:
+            raise
+    return False
+
+
+def call_process_market_book(
+    strategy_process_market_book: Callable, market, market_book
+) -> None:
+    try:
+        strategy_process_market_book(market, market_book)
+    except FlumineException as e:
+        logger.error(
+            "FlumineException %s in strategy_process_market_book %s %s"
+            % (e, strategy_process_market_book, market.market_id),
+            exc_info=True,
+        )
+    except Exception as e:
+        logger.critical(
+            "Unknown error %s in strategy_process_market_book %s %s"
+            % (e, strategy_process_market_book, market.market_id),
+            exc_info=True,
+        )
+        if config.raise_errors:
+            raise

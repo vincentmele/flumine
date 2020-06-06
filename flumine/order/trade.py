@@ -1,11 +1,12 @@
 import uuid
 import logging
+import collections
 from enum import Enum
 from typing import Union, Type
 from betfairlightweight.resources.bettingresources import CurrentOrder
 
 from ..strategy.strategy import BaseStrategy
-from .order import BetfairOrder
+from .order import BetfairOrder, OrderStatus
 from .ordertype import LimitOrder, LimitOnCloseOrder, MarketOnCloseOrder
 from ..exceptions import OrderError
 
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class TradeStatus(Enum):
+    PENDING = "Pending"  # pending exchange processing
     LIVE = "Live"
     COMPLETE = "Complete"
 
@@ -24,6 +26,7 @@ class Trade:
         selection_id: int,
         handicap: float,
         strategy: BaseStrategy,
+        notes: collections.OrderedDict = None,
         fill_kill=None,
         offset=None,
         green=None,
@@ -34,6 +37,9 @@ class Trade:
         self.selection_id = selection_id
         self.handicap = handicap
         self.strategy = strategy
+        self.notes = (
+            notes if notes else collections.OrderedDict()
+        )  # trade notes (e.g. triggers/market state)
         self.fill_kill = fill_kill
         self.offset = offset
         self.green = green
@@ -57,6 +63,17 @@ class Trade:
         )
         runner_context.reset()  # todo race condition?
 
+    @property
+    def trade_complete(self) -> bool:
+        if self.status != TradeStatus.LIVE:
+            return False
+        if self.offset_orders:
+            return False
+        for order in self.orders:
+            if order.status != OrderStatus.EXECUTION_COMPLETE:
+                return False
+        return True
+
     def create_order(
         self,
         side: str,
@@ -72,11 +89,13 @@ class Trade:
         self.orders.append(order)
         return order
 
-    def create_order_replacement(self, order: BetfairOrder) -> BetfairOrder:
+    def create_order_replacement(
+        self, order: BetfairOrder, new_price: float
+    ) -> BetfairOrder:
         """Create new order due to replace
         execution"""
         order_type = LimitOrder(
-            price=order.update_data["new_price"],
+            price=new_price,
             size=order.order_type.size,
             persistence_type=order.order_type.persistence_type,
         )
@@ -109,10 +128,25 @@ class Trade:
         return order
 
     @property
+    def notes_str(self) -> str:
+        return ",".join(str(x) for x in self.notes.values())
+
+    @property
     def info(self) -> dict:
         return {
             "id": self.id,
             "strategy": self.strategy,
             "status": self.status,
             "orders": [o.id for o in self.orders],
+            "notes": self.notes_str,
         }
+
+    def __enter__(self):
+        # todo raise error if already pending?
+        self._update_status(TradeStatus.PENDING)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_tb is None:
+            self._update_status(TradeStatus.LIVE)
+        else:
+            logger.critical("Trade error in %s" % self.id, exc_info=True)

@@ -52,7 +52,7 @@ class BaseStrategy:
         self.conflate_ms = conflate_ms
         self.stream_class = stream_class
         self._name = name
-        self.context = context
+        self.context = context or {}
         self.max_selection_exposure = max_selection_exposure
         self.max_order_exposure = max_order_exposure
 
@@ -87,12 +87,12 @@ class BaseStrategy:
     def process_raw_data(self, publish_time: int, datum: dict) -> None:
         return
 
-    def process_race_card(self, race_card: RaceCard) -> None:
-        # process raceCard object
-        return
-
     def process_orders(self, market: Market, orders: list) -> None:
         # process list of Order objects for strategy and Market
+        return
+
+    def process_closed_market(self, market: Market, market_book: MarketBook) -> None:
+        # process marketBook after closure
         return
 
     def finish(self) -> None:
