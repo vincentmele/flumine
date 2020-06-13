@@ -1,0 +1,15 @@
+# rename to settings.toml
+
+[default]
+username = 'XXXXX'
+password = 'XXXXX'
+app_key = 'XXXXX'
+certs = '/home/user/certs'
+
+event_type_ids = [7, 4339]
+#country_codes = ['GB']
+market_types = ['WIN']
+
+local_dir = '/tmp/abcde'
+force_update = 'True'
+remove_file = 'True'
