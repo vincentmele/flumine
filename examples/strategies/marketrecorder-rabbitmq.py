@@ -27,7 +27,7 @@ class MarketRecorder(BaseStrategy):
             "force_update", True
         )  # update after initial closure
         self.local_dir = self.context.get("local_dir", "/tmp")
-        self.recorder_id = 'abcd' #create_short_uuid()
+        self.recorder_id = create_short_uuid()
         self._loaded_markets = []  # list of marketIds
 
     def add(self) -> None:
@@ -128,8 +128,8 @@ class MarketRecorder(BaseStrategy):
                     )
                     txt_path = os.path.join(directory, file.split(".zip")[0])
                     zip_path = os.path.join(directory, file)
-#                    os.remove(zip_path)
-                    if self._remove_file and os.path.exists(txt_path):
+                    os.remove(zip_path)
+                    if self._remove_file:
                         os.remove(txt_path)
 
     @staticmethod

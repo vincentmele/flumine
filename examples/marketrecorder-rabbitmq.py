@@ -17,7 +17,7 @@ log_handler.setFormatter(formatter)
 logger.addHandler(log_handler)
 logger.setLevel(logging.INFO)
 
-trading = betfairlightweight.APIClient("", "", app_key="", certs="/root/certs")
+trading = betfairlightweight.APIClient("Rn2xJaSX4kLgQYZn5yEL", "RXKwNGQvpD3w", app_key="P86bgTI8r2VVhuYM", certs="/root/certs")
 
 client = clients.BetfairClient(trading)
 
@@ -26,7 +26,7 @@ framework = Flumine(client=client)
 strategy = MarketRecorder(
     name="WIN",
     market_filter=betfairlightweight.filters.streaming_market_filter(
-        event_type_ids=["4339", "7"],
+        event_type_ids=["4339"],
        # country_codes=["FR", "AU"],
         market_types=["WIN"],
         # market_ids=["1.169056942"],
