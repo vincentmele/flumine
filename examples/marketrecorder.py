@@ -3,11 +3,16 @@ import logging
 import betfairlightweight
 from pythonjsonlogger import jsonlogger
 
+import configparser
+
 from flumine import Flumine, clients
 from flumine.streams.datastream import DataStream
 from strategies.marketrecorder import MarketRecorder
 
 logger = logging.getLogger()
+
+config = configparser.SafeConfigParser()
+config.read('config')
 
 custom_format = "%(asctime) %(levelname) %(message)"
 log_handler = logging.StreamHandler()
@@ -17,7 +22,8 @@ log_handler.setFormatter(formatter)
 logger.addHandler(log_handler)
 logger.setLevel(logging.INFO)
 
-trading = betfairlightweight.APIClient("username")
+trading = betfairlightweight.APIClient(config.get('betfair', 'username'), config.get('betfair', 'password'),
+                                       config.get('betfair', 'app_key'), config.get('betfair', 'certs'))
 client = clients.BetfairClient(trading)
 
 framework = Flumine(client=client)

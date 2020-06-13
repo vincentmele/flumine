@@ -29,3 +29,5 @@ nosetests.xml
 
 # IDE metafile ignores
 .idea
+
+config
