@@ -1,3 +1,5 @@
+# rename to settings.toml
+
 [default]
 username = 'XXXXX'
 password = 'XXXXX'
