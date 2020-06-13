@@ -3,6 +3,173 @@
 Release History
 ---------------
 
+1.6.8 (2020-06-10)
++++++++++++++++++++
+
+**Improvements**
+
+- Simulated optimisations on matched size/price (@jsphon)
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.4.0
+
+1.6.7 (2020-06-08)
++++++++++++++++++++
+
+**Improvements**
+
+- #185 cleared orders meta implemented
+- Order.elapsed_seconds_executable added
+
+1.6.6 (2020-06-08)
++++++++++++++++++++
+
+**Improvements**
+
+- Error handling added to logging control
+
+**Bug Fixes**
+
+- Incorrect event type passed to log_control
+
+1.6.5 (2020-06-08)
++++++++++++++++++++
+
+**Improvements**
+
+- #205 MarketBook publishTime added to simulated.matched / order.execution_complete time added
+- Controls error message added
+- Info properties improved
+- Order/Trade .complete refactored
+
+**Bug Fixes**
+
+- Log order moved to after execution (missing betId)
+
+1.6.4 (2020-06-08)
++++++++++++++++++++
+
+**Improvements**
+
+- Client passed in AccountBalance event
+- PublishTime added to order (MarketBook)
+- GH Actions fixed
+
+1.6.3 (2020-06-03)
++++++++++++++++++++
+
+**Improvements**
+
+- #178 Client order stream disable/enable
+- #179 Info properties
+
+**Bug Fixes**
+
+- #191 missing git config
+
+1.6.2 (2020-06-03)
++++++++++++++++++++
+
+**Improvements**
+
+- #191 Github actions added for testing and deployment
+
+1.6.1 (2020-06-02)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- #195 refactor to prevent RuntimeError
+
+1.6.0 (2020-06-02)
++++++++++++++++++++
+
+**Improvements**
+
+- #175 Update/Replace simulated handling
+- Trade context manager added
+
+**Bug Fixes**
+
+- #163 selection exposure improvement
+- BetfairExecution replace bugfix
+
+1.5.7 (2020-06-01)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Sentry uses name in extra so do not override.
+
+1.5.6 (2020-06-01)
++++++++++++++++++++
+
+**Improvements**
+
+- #186 Error handling when calling strategy functions
+- Start delay bumped on workers and name changed
+- Minor typos / cleanups
+
+1.5.5 (2020-05-29)
++++++++++++++++++++
+
+**Improvements**
+
+- Missing Middleware inheritance
+- get_sp added
+
+**Bug Fixes**
+
+- MarketCatalogue missing from Market when logged
+
+1.5.4 (2020-05-22)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Market close bug
+
+1.5.3 (2020-05-22)
++++++++++++++++++++
+
+**Improvements**
+
+- Market properties added
+
+**Bug Fixes**
+
+- Memory leak in historical stream fixed (queue)
+- process_closed_market bug fix in process logic
+
+1.5.2 (2020-05-21)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- pypi bug?
+
+1.5.1 (2020-05-21)
++++++++++++++++++++
+
+**Improvements**
+
+- Worker refactor to make init simpler when adding custom workers
+
+1.5.0 (2020-05-21)
++++++++++++++++++++
+
+**Improvements**
+
+- Logging control added and integrated
+- PriceRecorder example added
+- Balance polling added
+- Cleared Orders/Market polling added
+- Trade.notes added
+- Middleware moved to flumine level
+- SimulatedMiddleware refactored to handle all logic
+- Context added to worker functionality
+
 1.4.0 (2020-05-13)
 +++++++++++++++++++
 

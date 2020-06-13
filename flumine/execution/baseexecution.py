@@ -3,7 +3,7 @@ import requests
 from concurrent.futures import ThreadPoolExecutor
 
 from ..order.orderpackage import BaseOrderPackage, OrderPackageType, BaseOrder
-
+from ..events.events import OrderEvent
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +73,7 @@ class BaseExecution:
         if package_type == OrderPackageType.PLACE:
             order.responses.placed(instruction_report)
             order.bet_id = instruction_report.bet_id
+            self.flumine.log_control(OrderEvent(order))
         elif package_type == OrderPackageType.CANCEL:
             order.responses.cancelled(instruction_report)
         elif package_type == OrderPackageType.UPDATE:
@@ -80,15 +81,11 @@ class BaseExecution:
         elif package_type == OrderPackageType.REPLACE:
             order.responses.placed(instruction_report)
             order.bet_id = instruction_report.bet_id
-        # self.flumine.log_control(order)  # todo log order
+            self.flumine.log_control(OrderEvent(order))
 
     @property
     def handler_queue(self):
         return self.flumine.handler_queue
-
-    @property
-    def markets(self):
-        return self.flumine.markets
 
     def shutdown(self):
         logger.info("Shutting down Execution (%s)" % self.__class__.__name__)

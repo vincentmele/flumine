@@ -1,7 +1,12 @@
 import datetime
+from typing import Tuple
 from betfairlightweight.resources.bettingresources import MarketBook, RunnerBook
 
-from .utils import SimulatedPlaceResponse, SimulatedCancelResponse
+from .utils import (
+    SimulatedPlaceResponse,
+    SimulatedCancelResponse,
+    SimulatedUpdateResponse,
+)
 from ..utils import get_price, wap
 from ..order.ordertype import OrderTypes
 from .. import config
@@ -15,7 +20,9 @@ class Simulated:
 
     def __init__(self, order):
         self.order = order
-        self.matched = []
+        self.size_matched = 0
+        self.average_price_matched = 0
+        self.matched = []  # [(publishTime, price, size)..]
         self.size_cancelled = 0.0
         self.size_lapsed = 0.0
         self.size_voided = 0.0
@@ -31,11 +38,13 @@ class Simulated:
             and market_book.bsp_reconciled
             and self.take_sp
         ):
-            self._process_sp(runner)
+            self._process_sp(market_book.publish_time_epoch, runner)
 
         if self.order.order_type.ORDER_TYPE == OrderTypes.LIMIT and self.size_remaining:
             # todo piq cancellations
-            self._process_traded(runner_analytics.traded)
+            self._process_traded(
+                market_book.publish_time_epoch, runner_analytics.traded
+            )
 
     def place(
         self, market_book: MarketBook, instruction: dict, bet_id: int
@@ -51,13 +60,21 @@ class Simulated:
             if self.order.side == "BACK":
                 if available_to_back >= price:
                     self._process_price_matched(
-                        price, size, runner.ex.available_to_back
+                        market_book.publish_time_epoch,
+                        price,
+                        size,
+                        runner.ex.available_to_back,
                     )
                     return self._create_place_response(bet_id)
                 available = runner.ex.available_to_lay
             else:
                 if available_to_lay <= price:
-                    self._process_price_matched(price, size, runner.ex.available_to_lay)
+                    self._process_price_matched(
+                        market_book.publish_time_epoch,
+                        price,
+                        size,
+                        runner.ex.available_to_lay,
+                    )
                     return self._create_place_response(bet_id)
                 available = runner.ex.available_to_back
 
@@ -98,13 +115,20 @@ class Simulated:
                 status="FAILURE", error_code="BET_ACTION_ERROR",  # todo ?
             )
 
-    def update(self):
+    def update(self, instruction: dict):
         # simulates updateOrder request->update->response
-        pass
-
-    def replace(self):
-        # simulates replaceOrder request->cancel/matching->response
-        pass
+        if (
+            self.order.order_type.ORDER_TYPE == OrderTypes.LIMIT
+            and self.size_remaining > 0
+        ):
+            self.order.order_type.persistence_type = instruction.get(
+                "newPersistenceType"
+            )
+            return SimulatedUpdateResponse(status="SUCCESS")
+        else:
+            return SimulatedCancelResponse(
+                status="FAILURE", error_code="BET_ACTION_ERROR",
+            )
 
     def _get_runner(self, market_book: MarketBook) -> RunnerBook:
         runner_dict = {
@@ -114,7 +138,7 @@ class Simulated:
         return runner_dict.get((self.order.selection_id, self.order.handicap))
 
     def _process_price_matched(
-        self, price: float, size: float, available: list
+        self, publish_time: int, price: float, size: float, available: list
     ) -> None:
         # calculate matched on execution
         size_remaining = size
@@ -130,12 +154,12 @@ class Simulated:
                     _size_matched = _size_remaining
                 else:
                     _size_matched = avail["size"]
-                _matched = (avail["price"], round(_size_matched, 2))
-                self.matched.append(_matched)
+                _matched = (publish_time, avail["price"], round(_size_matched, 2))
+                self._update_matched(_matched)
             else:
                 break
 
-    def _process_sp(self, runner: RunnerBook) -> None:
+    def _process_sp(self, publish_time: int, runner: RunnerBook) -> None:
         # calculate matched on BSP reconciliation
         actual_sp = runner.sp.actual_sp
         if actual_sp:
@@ -159,25 +183,26 @@ class Simulated:
                     size = round(_order_type.liability / (actual_sp - 1), 2)
             else:
                 raise NotImplementedError()
-            self.matched.append((actual_sp, size))
+            self._update_matched((publish_time, actual_sp, size))
 
-    def _process_traded(self, traded: dict) -> None:
+    def _process_traded(self, publish_time: int, traded: dict) -> None:
         # calculate matched on MarketBook update
         price = self.order.order_type.price
         for traded_price, traded_size in traded.items():
             if self.side == "BACK" and traded_price >= price:
-                self._calculate_process_traded(traded_size)
+                self._calculate_process_traded(publish_time, traded_size)
             elif self.side == "LAY" and traded_price <= price:
-                self._calculate_process_traded(traded_size)
+                self._calculate_process_traded(publish_time, traded_size)
 
-    def _calculate_process_traded(self, traded_size: float) -> None:
+    def _calculate_process_traded(self, publish_time: int, traded_size: float) -> None:
         traded_size = traded_size / 2
         if self._piq - traded_size < 0:
             size = traded_size - self._piq
             size = round(min(self.size_remaining, size), 2)
             if size:
-                self.matched.append(
+                self._update_matched(
                     (
+                        publish_time,
                         self.order.order_type.price,
                         size,
                     )  # todo takes the worst price, i.e what was asked
@@ -199,21 +224,9 @@ class Simulated:
     def side(self) -> str:
         return self.order.side
 
-    @property
-    def average_price_matched(self) -> float:
-        if self.matched:
-            _, avg_price_matched = wap(self.matched)
-            return avg_price_matched
-        else:
-            return 0
-
-    @property
-    def size_matched(self) -> float:
-        if self.matched:
-            size_matched, _ = wap(self.matched)
-            return size_matched
-        else:
-            return 0
+    def _update_matched(self, data: Tuple[int, float, float]) -> None:
+        self.matched.append(data)
+        self.size_matched, self.average_price_matched = wap(self.matched)
 
     @property
     def size_remaining(self) -> float:

@@ -3,13 +3,14 @@ import datetime
 
 from ..baseflumine import BaseFlumine
 from ..events import events
-from .. import config
+from .. import config, utils
 from ..clients import ExchangeType
 from ..exceptions import RunError
 from .utils import PendingPackages
 from ..markets.market import Market
 from ..order.orderpackage import OrderPackageType
 from ..order import process
+from ..markets.middleware import SimulatedMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class FlumineBacktest(BaseFlumine):
     def __init__(self, client):
         super(FlumineBacktest, self).__init__(client)
         self._pending_packages = PendingPackages()
+        self._market_middleware.append(SimulatedMiddleware())
 
     def run(self) -> None:
         if self.client.EXCHANGE != ExchangeType.SIMULATED:
@@ -60,6 +62,7 @@ class FlumineBacktest(BaseFlumine):
             self._unpatch_datetime()
 
     def _process_market_books(self, event: events.MarketBookEvent) -> None:
+        # todo DRY!
         for market_book in event.event:
             market_id = market_book.market_id
             config.current_time = market_book.publish_time
@@ -72,15 +75,22 @@ class FlumineBacktest(BaseFlumine):
                 continue
 
             market = self.markets.markets.get(market_id)
-            if not market:
+            if market is None:
                 market = self._add_live_market(market_id, market_book)
+                self.log_control(events.MarketEvent(market))
 
             # process market
             market(market_book)
 
+            # process middleware
+            for middleware in self._market_middleware:
+                middleware(market)  # todo err handling?
+
             for strategy in self.strategies:
-                if strategy.check_market(market, market_book):
-                    strategy.process_market_book(market, market_book)
+                if utils.call_check_market(strategy.check_market, market, market_book):
+                    utils.call_process_market_book(
+                        strategy.process_market_book, market, market_book
+                    )
 
             # process current orders
             blotter = market.blotter

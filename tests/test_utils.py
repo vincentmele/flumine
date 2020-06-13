@@ -1,10 +1,14 @@
+import logging
 import unittest
 from unittest import mock
 
-from flumine import utils
+from flumine import utils, FlumineException
 
 
 class UtilsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        logging.disable(logging.CRITICAL)
+
     def test_create_short_uuid(self):
         self.assertTrue(utils.create_short_uuid())
 
@@ -61,6 +65,18 @@ class UtilsTest(unittest.TestCase):
         )
         self.assertIsNone(utils.get_size([], 3))
 
+    def test_get_sp(self):
+        mock_runner = mock.Mock()
+        mock_runner.sp = []
+        self.assertIsNone(utils.get_sp(mock_runner))
+        mock_runner.sp = None
+        self.assertIsNone(utils.get_sp(mock_runner))
+        mock_runner = mock.Mock()
+        mock_runner.sp.actual_sp = "NaN"
+        self.assertIsNone(utils.get_sp(mock_runner))
+        mock_runner.sp.actual_sp = 12.2345
+        self.assertEqual(utils.get_sp(mock_runner), 12.2345)
+
     def test_price_ticks_away(self):
         self.assertEqual(utils.price_ticks_away(1.01, 1), 1.02)
         self.assertEqual(utils.price_ticks_away(1.01, 5), 1.06)
@@ -79,15 +95,85 @@ class UtilsTest(unittest.TestCase):
         self.assertEqual(utils.calculate_exposure([], [(5.6, 2)]), -9.2)
         self.assertEqual(utils.calculate_exposure([], [(5.6, 2), (5.8, 2)]), -18.8)
         self.assertEqual(utils.calculate_exposure([(5.6, 2)], [(5.6, 2)]), 0)
-        self.assertEqual(utils.calculate_exposure([(5.6, 2), (100, 20)], [(5.6, 2)]), 0)
+        self.assertEqual(
+            utils.calculate_exposure([(5.6, 2), (100, 20)], [(5.6, 2)]), -20
+        )
         self.assertEqual(
             utils.calculate_exposure([(5.6, 2), (100, 20)], [(10, 1000)]), -7010.80
         )
         self.assertEqual(utils.calculate_exposure([(10, 2)], [(5, 2)]), 0)
-        self.assertEqual(utils.calculate_exposure([(10, 2)], [(5, 4)]), 0)
+        self.assertEqual(utils.calculate_exposure([(10, 2)], [(5, 4)]), 2)
         self.assertEqual(utils.calculate_exposure([(10, 2)], [(5, 8)]), -14)
 
+        self.assertEqual(utils.calculate_exposure([(5.6, 200)], [(5.6, 100)]), -100)
+
     def test_wap(self):
-        self.assertEqual(utils.wap([(1.5, 100), (1.6, 100)]), (200, 1.55))
+        self.assertEqual(
+            utils.wap([(123456789, 1.5, 100), (123456789, 1.6, 100)]), (200, 1.55)
+        )
         self.assertEqual(utils.wap([]), (0, 0))
-        self.assertEqual(utils.wap([(1.5, 0)]), (0, 0))
+        self.assertEqual(utils.wap([(123456789, 1.5, 0)]), (0, 0))
+
+    def test_call_check_market(self):
+        mock_strategy_check = mock.Mock()
+        mock_market = mock.Mock()
+        mock_market_book = mock.Mock()
+        utils.call_check_market(mock_strategy_check, mock_market, mock_market_book)
+        mock_strategy_check.assert_called_with(mock_market, mock_market_book)
+
+    def test_call_check_market_flumine_error(self):
+        mock_strategy_check = mock.Mock(side_effect=FlumineException)
+        mock_market = mock.Mock()
+        mock_market_book = mock.Mock()
+        self.assertFalse(
+            utils.call_check_market(mock_strategy_check, mock_market, mock_market_book)
+        )
+        mock_strategy_check.assert_called_with(mock_market, mock_market_book)
+
+    def test_call_check_market_error(self):
+        mock_strategy_check = mock.Mock(side_effect=ValueError)
+        mock_market = mock.Mock()
+        mock_market_book = mock.Mock()
+        self.assertFalse(
+            utils.call_check_market(mock_strategy_check, mock_market, mock_market_book)
+        )
+        mock_strategy_check.assert_called_with(mock_market, mock_market_book)
+
+    @mock.patch("flumine.utils.config")
+    def test_call_check_market_raise(self, mock_config):
+        mock_config.raise_errors = True
+        mock_strategy_check = mock.Mock(side_effect=ValueError)
+        mock_market = mock.Mock()
+        mock_market_book = mock.Mock()
+        with self.assertRaises(ValueError):
+            utils.call_check_market(mock_strategy_check, mock_market, mock_market_book)
+
+    def test_call_process_market_book(self):
+        mock_strategy = mock.Mock()
+        mock_market = mock.Mock()
+        mock_market_book = mock.Mock()
+        utils.call_process_market_book(mock_strategy, mock_market, mock_market_book)
+        mock_strategy.assert_called_with(mock_market, mock_market_book)
+
+    def test_call_process_market_book_flumine_error(self):
+        mock_strategy = mock.Mock(side_effect=FlumineException)
+        mock_market = mock.Mock()
+        mock_market_book = mock.Mock()
+        utils.call_process_market_book(mock_strategy, mock_market, mock_market_book)
+        mock_strategy.assert_called_with(mock_market, mock_market_book)
+
+    def test_call_process_market_book_error(self):
+        mock_strategy = mock.Mock(side_effect=ZeroDivisionError)
+        mock_market = mock.Mock()
+        mock_market_book = mock.Mock()
+        utils.call_process_market_book(mock_strategy, mock_market, mock_market_book)
+        mock_strategy.assert_called_with(mock_market, mock_market_book)
+
+    @mock.patch("flumine.utils.config")
+    def test_call_process_market_book_raise(self, mock_config):
+        mock_config.raise_errors = True
+        mock_strategy = mock.Mock(side_effect=ZeroDivisionError)
+        mock_market = mock.Mock()
+        mock_market_book = mock.Mock()
+        with self.assertRaises(ZeroDivisionError):
+            utils.call_process_market_book(mock_strategy, mock_market, mock_market_book)

@@ -15,7 +15,7 @@ class Flumine(BaseFlumine):
         with self:
             while True:
                 event = self.handler_queue.get()
-                if event == EventType.TERMINATOR:
+                if event.EVENT_TYPE == EventType.TERMINATOR:
                     self._process_end_flumine()
                     break
 
@@ -35,19 +35,16 @@ class Flumine(BaseFlumine):
                     self._process_order_package(event)
 
                 elif event.EVENT_TYPE == EventType.CLEARED_MARKETS:
-                    logger.info(event)
+                    self._process_cleared_markets(event)
 
                 elif event.EVENT_TYPE == EventType.CLEARED_ORDERS:
-                    logger.info(event)
+                    self._process_cleared_orders(event)
 
                 elif event.EVENT_TYPE == EventType.CLOSE_MARKET:
                     self._process_close_market(event)
 
-                elif event.EVENT_TYPE == EventType.STRATEGY_RESET:
-                    logger.info(event)
-
                 elif event.EVENT_TYPE == EventType.CUSTOM_EVENT:
-                    logger.info(event)
+                    self._process_custom_event(event)
 
                 elif event.EVENT_TYPE == EventType.NEW_DAY:
                     logger.info(event)
@@ -57,20 +54,30 @@ class Flumine(BaseFlumine):
 
     def _add_default_workers(self):
         self.add_worker(
+            worker.BackgroundWorker(self, function=worker.keep_alive, interval=1200)
+        )
+        self.add_worker(
             worker.BackgroundWorker(
-                interval=1200,
-                function=worker.keep_alive,
-                name="keep_alive",
-                func_args=(self.client,),
+                self,
+                function=worker.poll_account_balance,
+                interval=120,
+                start_delay=10,  # wait for login
             )
         )
         self.add_worker(
             worker.BackgroundWorker(
-                start_delay=5,  # wait for streams to populate
-                interval=60,
+                self,
                 function=worker.poll_market_catalogue,
-                name="poll_market_catalogue",
-                func_args=(self.client, self.markets, self.handler_queue),
+                interval=60,
+                start_delay=10,  # wait for streams to populate
+            )
+        )
+        self.add_worker(
+            worker.BackgroundWorker(
+                self,
+                function=worker.poll_cleared_orders,
+                interval=10,  # restart
+                start_delay=10,  # wait for login
             )
         )
 

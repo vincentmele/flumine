@@ -116,11 +116,11 @@ class BaseStrategyTest(unittest.TestCase):
     def test_process_raw_data(self):
         self.strategy.process_raw_data(None, None)
 
-    def test_process_race_card(self):
-        self.strategy.process_race_card(None)
-
     def test_process_orders(self):
         self.strategy.process_orders(None, None)
+
+    def test_process_closed_market(self):
+        self.strategy.process_closed_market(None, None)
 
     def test_finish(self):
         self.strategy.finish()

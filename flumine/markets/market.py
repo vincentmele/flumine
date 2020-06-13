@@ -3,9 +3,7 @@ import logging
 from betfairlightweight.resources.bettingresources import MarketBook, MarketCatalogue
 
 from .blotter import Blotter
-from .middleware import SimulatedMiddleware
-from .. import config
-from ..order.order import OrderStatus
+from ..events import events
 
 logger = logging.getLogger(__name__)
 
@@ -13,33 +11,21 @@ logger = logging.getLogger(__name__)
 class Market:
     def __init__(
         self,
+        flumine,
         market_id: str,
         market_book: MarketBook,
         market_catalogue: MarketCatalogue = None,
     ):
+        self.flumine = flumine
         self.market_id = market_id
         self.closed = False
         self.market_book = market_book
         self.market_catalogue = market_catalogue
-        self._simulated_middleware = SimulatedMiddleware()
-        self._middleware = []
+        self.context = {"simulated": {}}  # data store (raceCard / scores etc)
         self.blotter = Blotter(self)
-
-        if config.simulated:
-            self._middleware.append(self._simulated_middleware)
 
     def __call__(self, market_book: MarketBook):
         self.market_book = market_book
-        # process middleware
-        for middleware in self._middleware:
-            middleware(self.market_catalogue, self.market_book)  # todo error handling?
-        # process simulated orders
-        for order in self.blotter:
-            if order.simulated and order.status == OrderStatus.EXECUTABLE:
-                runner_analytics = self._simulated_middleware.runners.get(
-                    (order.selection_id, order.handicap)
-                )
-                order.simulated(self.market_book, runner_analytics)
 
     def open_market(self) -> None:
         self.closed = False
@@ -49,10 +35,10 @@ class Market:
 
     # order
     def place_order(self, order, execute: bool = True) -> None:
-        order.place()
+        order.place(self.market_book.publish_time)
         if order.id not in self.blotter:
             self.blotter[order.id] = order
-            # todo log trade?
+            self.flumine.log_control(events.TradeEvent(order.trade))  # todo dupes?
         else:
             return  # retry attempt so ignore?
         if execute:  # handles replaceOrder
@@ -69,6 +55,16 @@ class Market:
     def replace_order(self, order, new_price: float) -> None:
         order.replace(new_price)
         self.blotter.pending_replace.append(order)
+
+    @property
+    def event_type_id(self) -> str:
+        if self.market_book:
+            return self.market_book.market_definition.event_type_id
+
+    @property
+    def event_id(self) -> str:
+        if self.market_book:
+            return self.market_book.market_definition.event_id
 
     @property
     def seconds_to_start(self):
