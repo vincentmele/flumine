@@ -1,3 +1,4 @@
+import time
 import logging
 import requests
 from concurrent.futures import ThreadPoolExecutor
@@ -7,7 +8,8 @@ from ..events.events import OrderEvent
 
 logger = logging.getLogger(__name__)
 
-MAX_WORKERS = 32
+MAX_WORKERS = 16
+MAX_SESSION_AGE = 200  # seconds since last request
 BET_ID_START = 100000000000  # simulated start betId->
 
 
@@ -15,16 +17,19 @@ class BaseExecution:
 
     EXCHANGE = None
 
-    def __init__(self, flumine, max_workers=MAX_WORKERS):
+    def __init__(self, flumine, max_workers: int = MAX_WORKERS):
         self.flumine = flumine
-        self._thread_pool = ThreadPoolExecutor(max_workers=max_workers)
+        self._max_workers = max_workers
+        self._thread_pool = ThreadPoolExecutor(max_workers=self._max_workers)
         self._bet_id = BET_ID_START
+        self._sessions = []
+        self._sessions_created = 0
 
     def handler(self, order_package: BaseOrderPackage):
         """ Handles order_package, capable of place, cancel,
         replace and update.
         """
-        http_session = requests.Session()  # todo keep
+        http_session = self._get_http_session()
         if order_package.package_type == OrderPackageType.PLACE:
             func = self.execute_place
         elif order_package.package_type == OrderPackageType.CANCEL:
@@ -57,6 +62,55 @@ class BaseExecution:
         self, order_package: BaseOrderPackage, http_session: requests.Session
     ) -> None:
         raise NotImplementedError
+
+    def _get_http_session(self) -> requests.Session:
+        while self._sessions:
+            try:
+                _session = self._sessions.pop()
+                if (time.time() - _session.time_returned) > MAX_SESSION_AGE:
+                    self._return_http_session(_session, err=True)
+                    continue
+                else:
+                    return _session
+            except IndexError:
+                continue
+        return self._create_new_session()
+
+    def _create_new_session(self) -> requests.Session:
+        session = requests.Session()
+        session.time_created = time.time()
+        session.time_returned = time.time()
+        self._sessions_created += 1
+        logger.info(
+            "New requests.Session created",
+            extra={
+                "sessions_created": self._sessions_created,
+                "session": session,
+                "session_time_created": session.time_created,
+                "session_time_returned": session.time_returned,
+            },
+        )
+        return session
+
+    def _return_http_session(
+        self, http_session: requests.Session, err: bool = False
+    ) -> None:
+        if err or len(self._sessions) >= self._max_workers:
+            logger.info(
+                "Closing and deleting requests.Session",
+                extra={
+                    "sessions_created": self._sessions_created,
+                    "session": http_session,
+                    "session_time_created": http_session.time_created,
+                    "session_time_returned": http_session.time_returned,
+                    "err": err,
+                },
+            )
+            http_session.close()
+            del http_session
+        else:
+            http_session.time_returned = time.time()
+            self._sessions.append(http_session)
 
     def _order_logger(
         self, order: BaseOrder, instruction_report, package_type: OrderPackageType

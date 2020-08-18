@@ -35,15 +35,19 @@ class BackgroundWorker(threading.Thread):
         self.context = context or {}
 
     def run(self) -> None:
-        time.sleep(self.start_delay)
         logger.info(
             "BackgroundWorker {0} starting".format(self.name),
             extra={
                 "worker_name": self.name,
                 "function": self.function,
                 "context": self.context,
+                "start_delay": self.start_delay,
+                "interval": self.interval,
+                "func_args": self.func_args,
+                "func_kwargs": self.func_kwargs,
             },
         )
+        time.sleep(self.start_delay)
         while self.is_alive():
             logger.debug(
                 "BackgroundWorker {0} executing".format(self.name),
@@ -65,6 +69,7 @@ class BackgroundWorker(threading.Thread):
                         "function": self.function,
                         "context": self.context,
                     },
+                    exc_info=True,
                 )
             time.sleep(self.interval)
 
@@ -99,11 +104,11 @@ def keep_alive(context: dict, flumine) -> None:
 def poll_market_catalogue(context: dict, flumine) -> None:
     client = flumine.client
     live_markets = list(flumine.markets.markets.keys())
-    for market_ids in chunks(live_markets, 100):
+    for market_ids in chunks(live_markets, 25):
         try:
             market_catalogues = client.betting_client.betting.list_market_catalogue(
                 filter=filters.market_filter(market_ids=market_ids),
-                max_results=100,
+                max_results=25,
                 market_projection=[
                     "COMPETITION",
                     "EVENT",

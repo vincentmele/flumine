@@ -3,17 +3,17 @@ import collections
 import unittest
 from unittest import mock
 
-from flumine.order.trade import Trade, OrderError, OrderStatus, TradeStatus
+from flumine.order.trade import Trade, OrderError, TradeStatus
 
 
 class TradeTest(unittest.TestCase):
     def setUp(self) -> None:
         logging.disable(logging.CRITICAL)
-        self.mock_strategy = mock.Mock()
+        mock_client = mock.Mock(paper_trade=False)
+        self.mock_strategy = mock.Mock(client=mock_client)
         self.mock_fill_kill = mock.Mock()
         self.mock_offset = mock.Mock()
         self.mock_green = mock.Mock()
-        self.mock_stop = mock.Mock()
         self.notes = collections.OrderedDict({"trigger": 123})
         self.trade = Trade(
             "1.234",
@@ -24,7 +24,6 @@ class TradeTest(unittest.TestCase):
             self.mock_fill_kill,
             self.mock_offset,
             self.mock_green,
-            self.mock_stop,
         )
 
     def test_init(self):
@@ -36,12 +35,18 @@ class TradeTest(unittest.TestCase):
         self.assertEqual(self.trade.fill_kill, self.mock_fill_kill)
         self.assertEqual(self.trade.offset, self.mock_offset)
         self.assertEqual(self.trade.green, self.mock_green)
-        self.assertEqual(self.trade.stop, self.mock_stop)
         self.assertEqual(self.trade.status_log, [])
         self.assertEqual(self.trade.orders, [])
         self.assertEqual(self.trade.offset_orders, [])
         self.assertIsNotNone(self.trade.date_time_created)
         self.assertIsNone(self.trade.date_time_complete)
+        self.assertIsNone(self.trade.market_notes)
+
+    @mock.patch("flumine.order.trade.get_market_notes")
+    def test_update_market_notes(self, mock_get_market_notes):
+        mock_market = mock.Mock()
+        self.trade.update_market_notes(mock_market)
+        self.assertEqual(self.trade.market_notes, mock_get_market_notes())
 
     def test__update_status(self):
         self.trade._update_status(TradeStatus.COMPLETE)
@@ -118,6 +123,9 @@ class TradeTest(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             self.trade.create_order_from_current(mock_current_order, "12345")
 
+    def test_client(self):
+        self.assertEqual(self.trade.client, self.mock_strategy.client)
+
     def test_notes_str(self):
         self.trade.notes = collections.OrderedDict({"1": 1, 2: "2", 3: 3, 4: "four"})
         # self.assertEqual(self.trade.notes_str, "1,2,3,four")
@@ -133,6 +141,7 @@ class TradeTest(unittest.TestCase):
                 "status": TradeStatus.LIVE,
                 "strategy": self.mock_strategy,
                 "notes": "123",
+                "market_notes": None,
             },
         )
 

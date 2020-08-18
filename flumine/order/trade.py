@@ -7,9 +7,10 @@ from typing import Union, Type
 from betfairlightweight.resources.bettingresources import CurrentOrder
 
 from ..strategy.strategy import BaseStrategy
-from .order import BetfairOrder, OrderStatus
+from .order import BetfairOrder
 from .ordertype import LimitOrder, LimitOnCloseOrder, MarketOnCloseOrder
 from ..exceptions import OrderError
+from ..utils import get_market_notes
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,6 @@ class Trade:
         fill_kill=None,
         offset=None,
         green=None,
-        stop=None,
     ):
         self.id = uuid.uuid1()
         self.market_id = market_id
@@ -41,16 +41,19 @@ class Trade:
         self.notes = (
             notes if notes else collections.OrderedDict()
         )  # trade notes (e.g. triggers/market state)
-        self.fill_kill = fill_kill
-        self.offset = offset
-        self.green = green
-        self.stop = stop
+        self.market_notes = None  # back,lay,lpt
+        self.fill_kill = fill_kill  # todo
+        self.offset = offset  # todo
+        self.green = green  # todo
         self.orders = []  # all orders linked to trade
         self.offset_orders = []  # pending offset orders once initial order has matched
         self.status_log = []
         self.status = TradeStatus.LIVE
         self.date_time_created = datetime.datetime.utcnow()
         self.date_time_complete = None
+
+    def update_market_notes(self, market) -> None:
+        self.market_notes = get_market_notes(market, self.selection_id)
 
     # status
     def _update_status(self, status: TradeStatus) -> None:
@@ -132,6 +135,11 @@ class Trade:
         return order
 
     @property
+    def client(self):
+        # 193 todo trade.client
+        return self.strategy.client
+
+    @property
     def notes_str(self) -> str:
         return ",".join(str(x) for x in self.notes.values())
 
@@ -143,6 +151,7 @@ class Trade:
             "status": self.status,
             "orders": [o.id for o in self.orders],
             "notes": self.notes_str,
+            "market_notes": self.market_notes,
         }
 
     def __enter__(self):

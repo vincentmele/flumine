@@ -8,16 +8,20 @@ class Markets:
     def __init__(self):
         self._markets = {}  # marketId: <Market>
 
-    def add_market(self, market_id: str, live_market: Market) -> None:
+    def add_market(self, market_id: str, market: Market) -> None:
         if market_id in self._markets:
             self._markets[market_id].open_market()
         else:
-            self._markets[market_id] = live_market
+            self._markets[market_id] = market
 
     def close_market(self, market_id: str) -> Market:
-        live_market = self._markets[market_id]
-        live_market.close_market()
-        return live_market
+        market = self._markets[market_id]
+        market.close_market()
+        return market
+
+    def remove_market(self, market_id: str) -> None:
+        del self._markets[market_id].blotter
+        del self._markets[market_id]
 
     def get_order(self, market_id: str, order_id: str) -> Optional[BetfairOrder]:
         try:
@@ -46,12 +50,12 @@ class Markets:
     @property
     def live_orders(self) -> bool:
         for market in self:
-            if market.closed is False and market.blotter.live_orders is True:
+            if market.closed is False and market.blotter.has_live_orders:
                 return True
         return False
 
     def __iter__(self) -> Iterator[Market]:
-        return iter(self.markets.values())
+        return iter(list(self.markets.values()))
 
     def __len__(self) -> int:
         return len(self.markets)

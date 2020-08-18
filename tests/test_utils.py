@@ -31,7 +31,15 @@ class UtilsTest(unittest.TestCase):
     #     utils.arange()
 
     def test_make_prices(self):
-        utils.make_prices(utils.MIN_PRICE, utils.CUTOFFS)
+        prices = utils.make_prices(utils.MIN_PRICE, utils.CUTOFFS)
+        self.assertEqual(len(prices), 350)
+
+    def test_get_nearest_price(self):
+        self.assertEqual(utils.get_nearest_price(1.011), 1.01)
+        self.assertEqual(utils.get_nearest_price(0), 1.01)
+        self.assertEqual(utils.get_nearest_price(1001), 1000)
+        self.assertEqual(utils.get_nearest_price(2.01), 2.02)
+        self.assertEqual(utils.get_nearest_price(2.0099), 2.00)
 
     def test_get_price(self):
         self.assertEqual(
@@ -177,3 +185,17 @@ class UtilsTest(unittest.TestCase):
         mock_market_book = mock.Mock()
         with self.assertRaises(ZeroDivisionError):
             utils.call_process_market_book(mock_strategy, mock_market, mock_market_book)
+
+    def test_get_runner_book(self):
+        mock_market_book = mock.Mock()
+        mock_runner = mock.Mock(selection_id=123, handicap=0)
+        mock_market_book.runners = [mock_runner]
+        self.assertEqual(utils.get_runner_book(mock_market_book, 123), mock_runner)
+
+    @mock.patch("flumine.utils.get_price", return_value=1.01)
+    def test_get_market_notes(self, mock_get_price):
+        mock_market_book = mock.Mock()
+        mock_runner = mock.Mock(selection_id=123, handicap=0, last_price_traded=5)
+        mock_market_book.runners = [mock_runner]
+        mock_market = mock.Mock(market_book=mock_market_book)
+        self.assertEqual(utils.get_market_notes(mock_market, 123), "1.01,1.01,5")

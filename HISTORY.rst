@@ -3,6 +3,171 @@
 Release History
 ---------------
 
+1.11.0 (2020-08-03)
++++++++++++++++++++
+
+**Improvements**
+
+- invested migrated to executable_orders on RunnerContext *breaking change
+- Use MarketCatalogue where available for market descriptions
+- Create session added, sessions closed and deleted if stale for 200s or more
+
+**Bug Fixes**
+
+- Limit process to limit orders to prevent SP orders from being completed when not + test bug fix
+
+1.10.6 (2020-08-10)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Prevent closed markets being removed when paper trading
+- Fix missing MarketBook from market (closes #FLUMINE-PROD-EE)
+
+1.10.5 (2020-08-04)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Prevent closed markets being removed when backtesting
+- Adds check to check removal_adjustment_factor is not None when processing runner removal (@lunswor)
+
+1.10.4 (2020-08-03)
++++++++++++++++++++
+
+**Improvements**
+
+- updates for bflw 2.7.2
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.7.2
+
+1.10.3 (2020-08-03)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Handle missing id in raw data (race stream)
+- Handle no market passed to market recorder (race stream)
+
+1.10.2 (2020-08-03)
++++++++++++++++++++
+
+**Improvements**
+
+- _process_raw_data refactored to create market objects and call market.closed_market on closure
+
+**Bug Fixes**
+
+- Docs typo (thanks @petercoles)
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.7.1
+
+1.10.1 (2020-07-20)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Add middleware moved to init, Simulated needs to be the first middleware
+
+1.10.0 (2020-07-20)
++++++++++++++++++++
+
+**Improvements**
+
+- #180 client paper trade now implemented
+- #193 initial work on multi client implementation
+- #192 simulation improvements with handling on runner removal
+
+1.9.3 (2020-07-17)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Move remove_markets logic to process_closed_markets (previously not called if no orders)
+- Travis remove py3.5
+
+1.9.2 (2020-07-16)
++++++++++++++++++++
+
+**Improvements**
+
+- update_market_notes refactor and move to utils to make patching easier
+
+**Bug Fixes**
+
+- Market.closed now updated when reopened + logging improvements
+
+1.9.1 (2020-07-15)
++++++++++++++++++++
+
+**Improvements**
+
+- #184 package retry on error (limited to 3 with back-off)
+- requests.Session now closed and deleted
+
+1.9.0 (2020-07-13)
++++++++++++++++++++
+
+**Improvements**
+
+- #201 requests session kept and reused to reduce latency
+- Middleware add/remove market functions added and integrated into Simulated
+- Logging improvements
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.6.0
+
+1.8.2 (2020-07-06)
++++++++++++++++++++
+
+**Improvements**
+
+- Previous 'middle' and 'matched' added to simulated
+
+**Bug Fixes**
+
+- Simulated bug fix on when data is not recorded from the beginning
+- Client control 'None' bug fix
+
+1.8.1 (2020-06-30)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Reduce MC count (debugging seg fault)
+
+1.8.0 (2020-06-29)
++++++++++++++++++++
+
+**Improvements**
+
+- Custom historical listener/stream added
+- Large order count (per market) optimisations
+- #203 client transaction count
+- #224 multi market processing
+
+**Bug Fixes**
+
+- #221 RuntimeError: market/order looping
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.5.0
+
+1.7.0 (2020-06-15)
++++++++++++++++++++
+
+**Improvements**
+
+- market_notes added to Trade
+- market removed after closed for 3600 seconds
+- client.best_price_execution handling added
+
 1.6.8 (2020-06-10)
 +++++++++++++++++++
 
@@ -295,7 +460,7 @@ Release History
 **Improvements**
 
 - black fmt
-- _async renamed to async_ to match bflw
+- _async renamed to `async_` to match bflw
 - py3.7 added to travis
 - #28 readme update
 

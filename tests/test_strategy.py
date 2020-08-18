@@ -13,9 +13,11 @@ class StrategiesTest(unittest.TestCase):
 
     def test_call(self):
         mock_strategy = mock.Mock()
-        self.strategies(mock_strategy)
+        mock_client = mock.Mock()
+        self.strategies(mock_strategy, mock_client)
         self.assertEqual(self.strategies._strategies, [mock_strategy])
         mock_strategy.add.assert_called_with()
+        mock_strategy.client = mock_client
 
     def test_start(self):
         mock_strategy = mock.Mock()
@@ -37,6 +39,7 @@ class BaseStrategyTest(unittest.TestCase):
         self.mock_market_data_filter = mock.Mock()
         self.streaming_timeout = 2
         self.conflate_ms = 100
+        self.mock_client = mock.Mock()
         self.strategy = strategy.BaseStrategy(
             market_filter=self.mock_market_filter,
             market_data_filter=self.mock_market_data_filter,
@@ -47,6 +50,7 @@ class BaseStrategyTest(unittest.TestCase):
             context={"trigger": 0.123},
             max_selection_exposure=1,
             max_order_exposure=2,
+            client=self.mock_client,
         )
 
     def test_init(self):
@@ -59,6 +63,7 @@ class BaseStrategyTest(unittest.TestCase):
         self.assertEqual(self.strategy.context, {"trigger": 0.123})
         self.assertEqual(self.strategy.max_selection_exposure, 1)
         self.assertEqual(self.strategy.max_order_exposure, 2)
+        self.assertEqual(self.strategy.client, self.mock_client)
 
     def test_check_market_no_subscribed(self):
         mock_market = mock.Mock()
@@ -125,7 +130,10 @@ class BaseStrategyTest(unittest.TestCase):
     def test_finish(self):
         self.strategy.finish()
 
-    def test_place_order(self):
+    @mock.patch(
+        "flumine.strategy.strategy.BaseStrategy.validate_order", return_value=True
+    )
+    def test_place_order(self, mock_validate_order):
         mock_order = mock.Mock()
         mock_order.lookup = ("1", 2, 3)
         mock_market = mock.Mock()
@@ -153,18 +161,17 @@ class BaseStrategyTest(unittest.TestCase):
 
     def test_validate_order(self):
         mock_order = mock.Mock()
-        runner_context = mock.Mock()
-        runner_context.invested = False
+        runner_context = mock.Mock(executable_orders=False)
         self.assertTrue(self.strategy.validate_order(runner_context, mock_order))
-        runner_context.invested = True
+        runner_context.executable_orders = True
         self.assertFalse(self.strategy.validate_order(runner_context, mock_order))
 
-    def test_is_invested(self):
-        mock_context = mock.Mock(invested=True)
+    def test_executable_orders(self):
+        mock_context = mock.Mock(executable_orders=True)
         self.strategy._invested = {("2", 456, 1): mock_context}
-        self.assertFalse(self.strategy.is_invested("1", 123, 1.0))
-        self.assertFalse(self.strategy.is_invested("2", 123, 1.0))
-        self.assertTrue(self.strategy.is_invested("2", 456, 1.0))
+        self.assertFalse(self.strategy.has_executable_orders("1", 123, 1.0))
+        self.assertFalse(self.strategy.has_executable_orders("2", 123, 1.0))
+        self.assertTrue(self.strategy.has_executable_orders("2", 456, 1.0))
 
     def test_get_runner_context(self):
         mock_context = mock.Mock(invested=True)

@@ -32,6 +32,12 @@ class MarketsTest(unittest.TestCase):
         self.markets.close_market("1.1")
         mock_market.close_market.assert_called_with()
 
+    def test_remove_market(self):
+        mock_market = mock.Mock()
+        self.markets._markets = {"1.1": mock_market}
+        self.markets.remove_market("1.1")
+        self.assertEqual(self.markets._markets, {})
+
     def test_get_order(self):
         mock_market = mock.Mock()
         mock_market.closed = False
@@ -74,9 +80,11 @@ class MarketsTest(unittest.TestCase):
         self.assertFalse(self.markets.live_orders)
         mock_market = mock.Mock()
         mock_market.closed = False
-        mock_market.blotter.live_orders = True
+        mock_market.blotter.has_live_orders = True
         self.markets._markets = {"1.234": mock_market}
         self.assertTrue(self.markets.live_orders)
+        mock_market.blotter.has_live_orders = False
+        self.assertFalse(self.markets.live_orders)
 
     def test_iter(self):
         self.assertEqual(len([i for i in self.markets]), 0)
@@ -101,6 +109,7 @@ class MarketTest(unittest.TestCase):
         self.assertEqual(self.market.flumine, self.mock_flumine)
         self.assertEqual(self.market.market_id, "1.234")
         self.assertFalse(self.market.closed)
+        self.assertIsNone(self.market.date_time_closed)
         self.assertEqual(self.market.market_book, self.mock_market_book)
         self.assertEqual(self.market.market_catalogue, self.mock_market_catalogue)
         self.assertEqual(self.market.context, {"simulated": {}})
@@ -117,15 +126,18 @@ class MarketTest(unittest.TestCase):
     def test_close_market(self):
         self.market.close_market()
         self.assertTrue(self.market.closed)
+        self.assertIsNotNone(self.market.date_time_closed)
 
     @mock.patch("flumine.markets.market.events")
     def test_place_order(self, mock_events):
         mock_order = mock.Mock()
         mock_order.id = "123"
+        mock_order.trade.market_notes = None
         self.market.place_order(mock_order)
         mock_order.place.assert_called_with(self.market.market_book.publish_time)
         self.assertEqual(self.market.blotter.pending_place, [mock_order])
         self.mock_flumine.log_control.assert_called_with(mock_events.TradeEvent())
+        mock_order.trade.update_market_notes.assert_called_with(self.market)
 
     @mock.patch("flumine.markets.market.events")
     def test_place_order_not_executed(self, mock_events):
@@ -169,18 +181,60 @@ class MarketTest(unittest.TestCase):
         mock_order.replace.assert_called_with(1.01)
         self.assertEqual(mock_blotter.pending_replace, [mock_order])
 
-    def test_event_type_id(self):
+    def test_event(self):
+        mock_market_catalogue = mock.Mock()
+        mock_market_catalogue.event.id = 12
+        self.market.market_catalogue = mock_market_catalogue
+
+        self.market.flumine.markets = []
+        self.assertEqual(self.market.event, {})
+
+        m_one = mock.Mock(market_type=1, event_id=12)
+        m_two = mock.Mock(market_type=2, event_id=12)
+        m_three = mock.Mock(market_type=3, event_id=123)
+        m_four = mock.Mock(market_type=1, event_id=12)
+        self.market.flumine.markets = [m_one, m_two, m_three, m_four]
+        self.assertEqual(self.market.event, {1: [m_one, m_four], 2: [m_two]})
+
+    def test_event_type_id_mc(self):
+        mock_market_catalogue = mock.Mock()
+        self.market.market_catalogue = mock_market_catalogue
+        self.assertEqual(self.market.event_type_id, mock_market_catalogue.event_type.id)
+
+    def test_event_type_id_mb(self):
+        self.market.market_catalogue = None
         mock_market_book = mock.Mock()
         self.market.market_book = mock_market_book
         self.assertEqual(
             self.market.event_type_id, mock_market_book.market_definition.event_type_id
         )
 
-    def test_event_id(self):
+    def test_event_id_mc(self):
+        mock_market_catalogue = mock.Mock()
+        self.market.market_catalogue = mock_market_catalogue
+        self.assertEqual(self.market.event_id, mock_market_catalogue.event.id)
+
+    def test_event_id_mb(self):
+        self.market.market_catalogue = None
         mock_market_book = mock.Mock()
         self.market.market_book = mock_market_book
         self.assertEqual(
             self.market.event_id, mock_market_book.market_definition.event_id
+        )
+
+    def test_market_type_mc(self):
+        mock_market_catalogue = mock.Mock()
+        self.market.market_catalogue = mock_market_catalogue
+        self.assertEqual(
+            self.market.market_type, mock_market_catalogue.description.market_type
+        )
+
+    def test_market_type_mb(self):
+        self.market.market_catalogue = None
+        mock_market_book = mock.Mock()
+        self.market.market_book = mock_market_book
+        self.assertEqual(
+            self.market.market_type, mock_market_book.market_definition.market_type
         )
 
     def test_seconds_to_start(self):
@@ -208,3 +262,9 @@ class MarketTest(unittest.TestCase):
         self.market.market_book = None
         self.market.market_catalogue = None
         self.assertLess(self.market.seconds_to_start, 0)
+
+    def test_elapsed_seconds_closed(self):
+        self.assertIsNone(self.market.elapsed_seconds_closed)
+        self.market.closed = True
+        self.market.date_time_closed = datetime.datetime.utcnow()
+        self.assertGreaterEqual(self.market.elapsed_seconds_closed, 0)

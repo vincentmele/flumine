@@ -1,8 +1,9 @@
 import unittest
 from unittest import mock
 
-from flumine.streams import streams, datastream
+from flumine.streams import streams, datastream, historicalstream
 from flumine.streams.basestream import BaseStream
+from flumine.streams.simulatedorderstream import CurrentOrders
 from flumine.exceptions import ListenerError
 
 
@@ -42,11 +43,14 @@ class StreamsTest(unittest.TestCase):
         self.mock_flumine.BACKTEST = True
         mock_strategy = mock.Mock()
         mock_strategy.streams = []
-        mock_strategy.market_filter = {"markets": ["dubs of the mad skint and british"]}
+        mock_strategy.market_filter = {
+            "markets": ["dubs of the mad skint and british"],
+            "listener_kwargs": {"canary_yellow": True},
+        }
         self.streams(mock_strategy)
 
         mock_add_historical_stream.assert_called_with(
-            mock_strategy, "dubs of the mad skint and british"
+            mock_strategy, "dubs of the mad skint and british", canary_yellow=True
         )
         self.assertEqual(len(mock_strategy.streams), 1)
 
@@ -60,10 +64,17 @@ class StreamsTest(unittest.TestCase):
 
     @mock.patch("flumine.streams.streams.Streams.add_order_stream")
     def test_add_client_betfair(self, mock_add_order_stream):
-        mock_client = mock.Mock(order_stream=True)
+        mock_client = mock.Mock(order_stream=True, paper_trade=False)
         mock_client.EXCHANGE = streams.ExchangeType.BETFAIR
         self.streams.add_client(mock_client)
         mock_add_order_stream.assert_called_with(mock_client)
+
+    @mock.patch("flumine.streams.streams.Streams.add_simulated_order_stream")
+    def test_add_client_paper_trade(self, mock_add_simulated_order_stream):
+        mock_client = mock.Mock(order_stream=True, paper_trade=True)
+        mock_client.EXCHANGE = streams.ExchangeType.BETFAIR
+        self.streams.add_client(mock_client)
+        mock_add_simulated_order_stream.assert_called_with(mock_client)
 
     @mock.patch("flumine.streams.streams.Streams.add_order_stream")
     def test_add_client_no_order_stream(self, mock_add_order_stream):
@@ -123,7 +134,7 @@ class StreamsTest(unittest.TestCase):
         mock_strategy.conflate_ms = 4
         mock_strategy.stream_class = streams.MarketStream
 
-        self.streams.add_historical_stream(mock_strategy, "GANG")
+        self.streams.add_historical_stream(mock_strategy, "GANG", inplay=True)
         self.assertEqual(len(self.streams), 1)
         mock_increment.assert_called_with()
         mock_historical_stream_class.assert_called_with(
@@ -133,6 +144,8 @@ class StreamsTest(unittest.TestCase):
             market_data_filter=mock_strategy.market_data_filter,
             streaming_timeout=mock_strategy.streaming_timeout,
             conflate_ms=mock_strategy.conflate_ms,
+            output_queue=False,
+            inplay=True,
         )
 
     def test_add_historical_stream_old(self):
@@ -148,11 +161,32 @@ class StreamsTest(unittest.TestCase):
 
     @mock.patch("flumine.streams.streams.OrderStream")
     @mock.patch("flumine.streams.streams.Streams._increment_stream_id")
-    def test_add_historical_stream(self, mock_increment, mock_order_stream_class):
+    def test_add_historical_stream_conflate(
+        self, mock_increment, mock_order_stream_class
+    ):
         conflate_ms = 500
         streaming_timeout = 0.5
         mock_client = mock.Mock()
         self.streams.add_order_stream(mock_client, conflate_ms, streaming_timeout)
+        self.assertEqual(len(self.streams), 1)
+        mock_increment.assert_called_with()
+        mock_order_stream_class.assert_called_with(
+            flumine=self.mock_flumine,
+            stream_id=mock_increment(),
+            streaming_timeout=streaming_timeout,
+            conflate_ms=conflate_ms,
+            client=mock_client,
+        )
+
+    @mock.patch("flumine.streams.streams.SimulatedOrderStream")
+    @mock.patch("flumine.streams.streams.Streams._increment_stream_id")
+    def test_add_simulated_order_stream(self, mock_increment, mock_order_stream_class):
+        conflate_ms = 500
+        streaming_timeout = 0.5
+        mock_client = mock.Mock()
+        self.streams.add_simulated_order_stream(
+            mock_client, conflate_ms, streaming_timeout
+        )
         self.assertEqual(len(self.streams), 1)
         mock_increment.assert_called_with()
         mock_order_stream_class.assert_called_with(
@@ -205,6 +239,8 @@ class TestBaseStream(unittest.TestCase):
             {"test": "me"},
             {"please": "now"},
             client=self.mock_client,
+            output_queue=False,
+            operation="test",
         )
 
     def test_init(self):
@@ -217,6 +253,8 @@ class TestBaseStream(unittest.TestCase):
         self.assertIsNone(self.stream._stream)
         self.assertEqual(self.stream._client, self.mock_client)
         self.assertEqual(self.stream.MAX_LATENCY, 0.5)
+        self.assertIsNone(self.stream._output_queue)
+        self.assertEqual(self.stream.operation, "test")
 
     def test_run(self):
         with self.assertRaises(NotImplementedError):
@@ -371,7 +409,14 @@ class TestHistoricalStream(unittest.TestCase):
     def setUp(self) -> None:
         self.mock_flumine = mock.Mock()
         self.stream = streams.HistoricalStream(
-            self.mock_flumine, 123, 0.01, 100, {"test": "me"}, {"please": "now"}
+            self.mock_flumine,
+            123,
+            0.01,
+            100,
+            {"test": "me"},
+            {"please": "now"},
+            inplay=True,
+            seconds_to_start=123,
         )
 
     def test_init(self):
@@ -383,6 +428,8 @@ class TestHistoricalStream(unittest.TestCase):
         self.assertEqual(self.stream.conflate_ms, 100)
         self.assertIsNone(self.stream._stream)
         self.assertIsNone(self.stream.MAX_LATENCY)
+        self.assertTrue(self.stream._listener.inplay)
+        self.assertEqual(self.stream._listener.seconds_to_start, 123)
 
     def test_run(self):
         self.stream.run()
@@ -392,8 +439,104 @@ class TestHistoricalStream(unittest.TestCase):
 
     @mock.patch("flumine.streams.historicalstream.HistoricalGeneratorStream")
     def test_create_generator(self, mock_generator):
+        generator = self.stream.create_generator()
+        mock_generator.assert_called_with(
+            file_path={"test": "me"},
+            listener=self.stream._listener,
+            operation="marketSubscription",
+        )
+        self.assertEqual(generator, mock_generator().get_generator())
+
+
+class TestStream(unittest.TestCase):
+    def setUp(self) -> None:
+        self.listener = mock.Mock()
+        self.stream = historicalstream.Stream(self.listener)
+
+    def test_init(self):
+        self.assertEqual(self.stream._listener, self.listener)
+        self.assertEqual(self.stream._lookup, "mc")
+
+    def test__process(self):
+        self.stream._process(
+            [{"id": "1.23", "img": {1: 2}, "marketDefinition": {"runners": []}}], 12345
+        )
+        self.assertEqual(len(self.stream._caches), 1)
+
+    def test_snap_inplay(self):
+        # inPlay
+        self.stream = historicalstream.Stream(
+            mock.Mock(inplay=True, seconds_to_start=None)
+        )
+        self.stream._caches = {
+            "1.123": mock.Mock(market_definition={"status": "OPEN", "inPlay": False})
+        }
+        self.assertEqual(len(self.stream.snap()), 0)
+        self.stream._caches = {
+            "1.123": mock.Mock(market_definition={"status": "OPEN", "inPlay": True})
+        }
+        self.assertEqual(len(self.stream.snap()), 1)
+        self.stream._caches = {
+            "1.123": mock.Mock(market_definition={"status": "CLOSED", "inPlay": False})
+        }
+        self.assertEqual(len(self.stream.snap()), 1)
+
+        self.stream = historicalstream.Stream(
+            mock.Mock(inplay=False, seconds_to_start=None)
+        )
+        self.stream._caches = {
+            "1.123": mock.Mock(market_definition={"status": "OPEN", "inPlay": False})
+        }
+        self.assertEqual(len(self.stream.snap()), 1)
+        self.stream._caches = {
+            "1.123": mock.Mock(market_definition={"status": "OPEN", "inPlay": True})
+        }
+        self.assertEqual(len(self.stream.snap()), 0)
+
+    def test_snap_seconds_to_start(self):
+        # secondsToStart
+        self.stream = historicalstream.Stream(
+            mock.Mock(inplay=None, seconds_to_start=600)
+        )
+        self.stream._caches = {
+            "1.123": mock.Mock(
+                publish_time=123,
+                market_definition={
+                    "status": "OPEN",
+                    "inPlay": False,
+                    "marketTime": 456,
+                },
+            )
+        }
+        self.assertEqual(len(self.stream.snap()), 1)
+        self.stream._caches = {
+            "1.123": mock.Mock(
+                publish_time=123,
+                market_definition={
+                    "status": "OPEN",
+                    "inPlay": False,
+                    "marketTime": 1234567,
+                },
+            )
+        }
+        self.assertEqual(len(self.stream.snap()), 0)
+
+
+class TestHistoricListener(unittest.TestCase):
+    def setUp(self) -> None:
+        self.mock_flumine = mock.Mock()
+        self.listener = historicalstream.HistoricListener(
+            inplay=True, seconds_to_start=123
+        )
+
+    def test_init(self):
+        self.assertTrue(self.listener.inplay)
+        self.assertEqual(self.listener.seconds_to_start, 123)
+
+    @mock.patch("flumine.streams.historicalstream.Stream")
+    def test__add_stream(self, mock_stream):
         self.assertEqual(
-            self.stream.create_generator(), mock_generator().get_generator()
+            self.listener._add_stream(123, "marketSubscription"), mock_stream()
         )
 
 
@@ -416,3 +559,36 @@ class TestOrderStream(unittest.TestCase):
     #
     # def test_handle_output(self):
     #     pass
+
+
+class TestSimulatedOrderStream(unittest.TestCase):
+    def setUp(self) -> None:
+        self.mock_flumine = mock.Mock()
+        self.stream = streams.SimulatedOrderStream(self.mock_flumine, 123, 0.01, 100)
+
+    def test_init(self):
+        self.assertEqual(self.stream.flumine, self.mock_flumine)
+        self.assertEqual(self.stream.stream_id, 123)
+        self.assertIsNone(self.stream.market_filter)
+        self.assertIsNone(self.stream.market_data_filter)
+        self.assertEqual(self.stream.streaming_timeout, 0.01)
+        self.assertEqual(self.stream.conflate_ms, 100)
+        self.assertIsNone(self.stream._stream)
+
+    def test_current_orders(self):
+        current_orders = CurrentOrders([1])
+        self.assertEqual(current_orders.orders, [1])
+        self.assertFalse(current_orders.more_available)
+
+    # def test_run(self):
+    #     pass
+
+    def test__get_current_orders(self):
+        mock_market = mock.Mock(closed=False)
+        order_one = mock.Mock(simulated=True)
+        order_one.trade.client = self.stream.client
+        order_two = mock.Mock(simulated=True)
+        order_three = mock.Mock(simulated=True)
+        mock_market.blotter = [order_one, order_two, order_three]
+        self.stream.flumine.markets = [mock_market, mock.Mock(closed=True)]
+        self.assertEqual(self.stream._get_current_orders(), [order_one])

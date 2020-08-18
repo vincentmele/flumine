@@ -2,8 +2,8 @@ import uuid
 import logging
 import hashlib
 from typing import Optional, Tuple, Callable
-from decimal import Decimal
-from betfairlightweight.resources.bettingresources import RunnerBook
+from decimal import Decimal, ROUND_HALF_UP
+from betfairlightweight.resources.bettingresources import MarketBook, RunnerBook
 
 from . import config
 from .exceptions import FlumineException
@@ -74,6 +74,19 @@ def make_prices(min_price, cutoffs):
 PRICES = make_prices(MIN_PRICE, CUTOFFS)
 
 
+def get_nearest_price(price, cutoffs=CUTOFFS):
+    if price <= MIN_PRICE:
+        return MIN_PRICE
+    if price > MAX_PRICE:
+        return MAX_PRICE
+    price = as_dec(price)
+    for cutoff, step in cutoffs:
+        if price < cutoff:
+            break
+    step = as_dec(step)
+    return float((price * step).quantize(2, ROUND_HALF_UP) / step)
+
+
 def get_price(data: list, level: int) -> Optional[float]:
     try:
         return data[level]["price"]
@@ -118,10 +131,12 @@ def price_ticks_away(price: float, n_ticks: int) -> float:
 
 
 # todo LRU cache?
-def calculate_exposure(mb: list, ml: list) -> int:
+def calculate_exposure(mb: list, ml: list) -> float:
     """Calculates exposure based on list
     of (price, size)
     """
+    if not mb and not ml:
+        return 0.0
     back_exp = sum(-i[1] for i in mb)
     back_profit = sum((i[0] - 1) * i[1] for i in mb)
     lay_exp = sum((i[0] - 1) * -i[1] for i in ml)
@@ -145,7 +160,9 @@ def wap(matched: list) -> Tuple[float, float]:
         return round(b, 2), round(a / b, 2)
 
 
-def call_check_market(strategy_check_market: Callable, market, market_book) -> bool:
+def call_check_market(
+    strategy_check_market: Callable, market, market_book: MarketBook
+) -> bool:
     try:
         return strategy_check_market(market, market_book)
     except FlumineException as e:
@@ -166,7 +183,7 @@ def call_check_market(strategy_check_market: Callable, market, market_book) -> b
 
 
 def call_process_market_book(
-    strategy_process_market_book: Callable, market, market_book
+    strategy_process_market_book: Callable, market, market_book: MarketBook
 ) -> None:
     try:
         strategy_process_market_book(market, market_book)
@@ -184,3 +201,29 @@ def call_process_market_book(
         )
         if config.raise_errors:
             raise
+
+
+def get_runner_book(
+    market_book: MarketBook, selection_id: int, handicap=0
+) -> Optional[RunnerBook]:
+    """Returns runner book based on selection id.
+    """
+    for runner_book in market_book.runners:
+        if (
+            runner_book.selection_id == selection_id
+            and runner_book.handicap == handicap
+        ):
+            return runner_book
+
+
+def get_market_notes(market, selection_id: int) -> Optional[str]:
+    """Returns a string of notes for a runner,
+    currently 'back,lay,last_price_traded'
+    """
+    runner = get_runner_book(market.market_book, selection_id)
+    if runner:
+        return "{0},{1},{2}".format(
+            get_price(runner.ex.available_to_back, 0),
+            get_price(runner.ex.available_to_lay, 0),
+            runner.last_price_traded,
+        )

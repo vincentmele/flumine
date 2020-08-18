@@ -30,7 +30,7 @@ Support for market, order and custom streaming data.
 
 [join slack group](https://betfairlightweight.herokuapp.com)
 
-Currently tested on Python 3.5, 3.6, 3.7 and 3.8.
+Currently tested on Python 3.6, 3.7 and 3.8.
 
 ## installation
 
@@ -38,7 +38,7 @@ Currently tested on Python 3.5, 3.6, 3.7 and 3.8.
 $ pip install flumine
 ```
 
-flumine requires Python 3.5+
+flumine requires Python 3.6+
 
 ## setup
 
@@ -95,11 +95,11 @@ class ExampleStrategy(BaseStrategy):
         for order in orders:
             if order.status == OrderStatus.EXECUTABLE:
                 if order.size_remaining == 2.00:
-                    self.cancel_order(order, 0.02)  # reduce size to 1.98
+                    self.cancel_order(market, order, 0.02)  # reduce size to 1.98
                 if order.order_type.persistence_type == "LAPSE":
-                    self.update_order(order, "PERSIST")
+                    self.update_order(market, order, "PERSIST")
                 if order.size_remaining > 0:
-                    self.replace_order(order, 1.02)  # move
+                    self.replace_order(market, order, 1.02)  # move
 
 
 strategy = ExampleStrategy(
@@ -129,7 +129,7 @@ framework.run()
 - Streaming
 - Multiple strategies
 - Order execution
-- Paper trading (in development)
+- Paper trading
 - Back testing
 - Analytics (in development)
 - Middleware and background workers to enable Scores / RaceCard / InPlayService
