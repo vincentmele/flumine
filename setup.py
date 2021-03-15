@@ -14,22 +14,28 @@ setup(
     name=about["__title__"],
     version=about["__version__"],
     packages=find_packages(
-        exclude=["examples", "examples.strategies", "examples.workers"]
+        exclude=[
+            "examples",
+            "examples.strategies",
+            "examples.workers",
+            "examples.middleware",
+            "examples.controls",
+        ]
     ),
     package_dir={"flumine": "flumine"},
     install_requires=INSTALL_REQUIRES,
     url=about["__url__"],
     license=about["__license__"],
     author=about["__author__"],
-    author_email="",
+    author_email="a@unknown.invalid",
     description=about["__description__"],
     classifiers=[
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
-        "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
     ],
     test_suite="tests",
 )

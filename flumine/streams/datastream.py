@@ -1,5 +1,5 @@
 import logging
-from tenacity import retry, wait_exponential
+from tenacity import retry
 from betfairlightweight import StreamListener
 from betfairlightweight import BetfairError
 from betfairlightweight.streaming.stream import BaseStream as BFBaseStream
@@ -10,6 +10,8 @@ from ..exceptions import ListenerError
 
 logger = logging.getLogger(__name__)
 
+RETRY_WAIT = BaseStream.RETRY_WAIT
+
 
 """
 Custom listener that doesn't do any processing,
@@ -18,18 +20,19 @@ helps reduce CPU.
 
 
 class FlumineListener(StreamListener):
-    def _add_stream(self, unique_id, stream_type):
-        if stream_type == "marketSubscription":
-            return FlumineMarketStream(self)
-        elif stream_type == "orderSubscription":
-            raise ListenerError("Not expecting an order stream...")
-        elif stream_type == "raceSubscription":
-            return FlumineRaceStream(self)
+    def _add_stream(self, unique_id: int, operation: str) -> BFBaseStream:
+        if operation == "marketSubscription":
+            return FlumineMarketStream(self, unique_id)
+        elif operation == "orderSubscription":
+            raise ListenerError("Unable to process order stream")
+        elif operation == "raceSubscription":
+            return FlumineRaceStream(self, unique_id)
 
 
 class FlumineStream(BFBaseStream):
-    def on_process(self, output: list) -> None:
-        self.output_queue.put(RawDataEvent(output))
+    def on_process(self, caches: list) -> None:
+        output = RawDataEvent(caches)
+        self.output_queue.put(output)
 
     def __str__(self):
         return "FlumineStream"
@@ -42,8 +45,8 @@ class FlumineMarketStream(FlumineStream):
 
     _lookup = "mc"
 
-    def _process(self, market_books, publish_time):
-        for market_book in market_books:
+    def _process(self, data: list, publish_time: int) -> bool:
+        for market_book in data:
             market_id = market_book.get("id")
             if (
                 "marketDefinition" in market_book
@@ -63,17 +66,18 @@ class FlumineMarketStream(FlumineStream):
                     "[MarketStream: %s] %s added, %s markets in cache"
                     % (self.unique_id, market_id, len(self._caches))
                 )
+            self._updates_processed += 1
 
-        self.on_process([self.unique_id, publish_time, market_books])
-        self._updates_processed += len(market_books)
+        self.on_process([self.unique_id, publish_time, data])
+        return False
 
 
 class FlumineRaceStream(FlumineStream):
 
     _lookup = "rc"
 
-    def _process(self, race_updates, publish_time):
-        for update in race_updates:
+    def _process(self, data: list, publish_time: int) -> bool:
+        for update in data:
             market_id = update["mid"]
             if self._caches.get(market_id) is None:
                 # adds empty object to cache to track live market count
@@ -82,9 +86,10 @@ class FlumineRaceStream(FlumineStream):
                     "[RaceStream: %s] %s added, %s markets in cache"
                     % (self.unique_id, market_id, len(self._caches))
                 )
+            self._updates_processed += 1
 
-        self.on_process([self.unique_id, publish_time, race_updates])
-        self._updates_processed += len(race_updates)
+        self.on_process([self.unique_id, publish_time, data])
+        return False
 
 
 class DataStream(BaseStream):
@@ -95,9 +100,17 @@ class DataStream(BaseStream):
         BaseStream.__init__(self, *args, **kwargs)
         self._listener = self.LISTENER(output_queue=self.flumine.handler_queue)
 
-    @retry(wait=wait_exponential(multiplier=1, min=2, max=20))
+    @retry(wait=RETRY_WAIT)
     def run(self) -> None:
-        logger.info("Starting DataStream")
+        logger.info(
+            "Starting DataStream {0}".format(self.stream_id),
+            extra={
+                "stream_id": self.stream_id,
+                "market_filter": self.market_filter,
+                "market_data_filter": self.market_data_filter,
+                "conflate_ms": self.conflate_ms,
+            },
+        )
 
         self._stream = self.betting_client.streaming.create_stream(
             unique_id=self.stream_id, listener=self._listener
@@ -112,9 +125,13 @@ class DataStream(BaseStream):
             )
             self._stream.start()
         except BetfairError:
-            logger.error("DataStream run error", exc_info=True)
+            logger.error(
+                "DataStream {0} run error".format(self.stream_id), exc_info=True
+            )
             raise
         except Exception:
-            logger.critical("DataStream run error", exc_info=True)
+            logger.critical(
+                "DataStream {0} run error".format(self.stream_id), exc_info=True
+            )
             raise
         logger.info("Stopped DataStream {0}".format(self.stream_id))

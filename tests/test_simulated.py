@@ -10,7 +10,7 @@ class SimulatedTest(unittest.TestCase):
         self.mock_order_type = mock.Mock(
             price=12, size=2.00, ORDER_TYPE=OrderTypes.LIMIT
         )
-        mock_client = mock.Mock(paper_trade=False)
+        mock_client = mock.Mock(paper_trade=False, min_bsp_liability=10)
         mock_trade = mock.Mock(client=mock_client)
         self.mock_order = mock.Mock(
             selection_id=1234,
@@ -28,13 +28,32 @@ class SimulatedTest(unittest.TestCase):
         self.assertEqual(self.simulated.size_lapsed, 0)
         self.assertEqual(self.simulated.size_voided, 0)
         self.assertEqual(self.simulated._piq, 0)
+        self.assertIsNone(self.simulated.market_version)
         self.assertFalse(self.simulated._bsp_reconciled)
 
     @mock.patch("flumine.backtest.simulated.Simulated._get_runner")
     @mock.patch("flumine.backtest.simulated.Simulated.take_sp", return_value=True)
     @mock.patch("flumine.backtest.simulated.Simulated._process_traded")
     @mock.patch("flumine.backtest.simulated.Simulated._process_sp")
-    def test_call(self, mock__process_sp, mock__process_traded, _, mock__get_runner):
+    def test_call_process_traded(
+        self, mock__process_sp, mock__process_traded, _, mock__get_runner
+    ):
+        mock_market_book = mock.Mock()
+        mock_market_book.bsp_reconciled = False
+        mock_runner_analytics = mock.Mock()
+        self.simulated(mock_market_book, mock_runner_analytics)
+        mock__process_sp.assert_not_called()
+        mock__process_traded.assert_called_with(
+            mock_market_book.publish_time_epoch, mock_runner_analytics.traded
+        )
+
+    @mock.patch("flumine.backtest.simulated.Simulated._get_runner")
+    @mock.patch("flumine.backtest.simulated.Simulated.take_sp", return_value=True)
+    @mock.patch("flumine.backtest.simulated.Simulated._process_traded")
+    @mock.patch("flumine.backtest.simulated.Simulated._process_sp")
+    def test_call_process_sp(
+        self, mock__process_sp, mock__process_traded, _, mock__get_runner
+    ):
         mock_market_book = mock.Mock()
         mock_market_book.bsp_reconciled = True
         mock_runner_analytics = mock.Mock()
@@ -42,9 +61,26 @@ class SimulatedTest(unittest.TestCase):
         mock__process_sp.assert_called_with(
             mock_market_book.publish_time_epoch, mock__get_runner()
         )
-        mock__process_traded.assert_called_with(
-            mock_market_book.publish_time_epoch, mock_runner_analytics.traded
+        mock__process_traded.assert_not_called()
+
+    @mock.patch("flumine.backtest.simulated.Simulated._get_runner")
+    @mock.patch("flumine.backtest.simulated.Simulated.take_sp", return_value=True)
+    @mock.patch("flumine.backtest.simulated.Simulated._process_traded")
+    @mock.patch("flumine.backtest.simulated.Simulated._process_sp")
+    def test_call_market_version(
+        self, mock__process_sp, mock__process_traded, _, mock__get_runner
+    ):
+        self.simulated.market_version = 123
+        self.simulated.order.order_type.persistence_type = "LAPSE"
+        mock_market_book = mock.Mock(
+            bsp_reconciled=False, version=124, status="SUSPENDED"
         )
+        mock_runner_analytics = mock.Mock()
+        self.simulated(mock_market_book, mock_runner_analytics)
+        self.assertEqual(self.simulated.size_lapsed, 2.0)
+        self.assertEqual(self.simulated.size_remaining, 0.0)
+        mock__process_sp.assert_not_called()
+        mock__process_traded.assert_not_called()
 
     @mock.patch("flumine.backtest.simulated.Simulated._get_runner")
     @mock.patch("flumine.backtest.simulated.Simulated.take_sp", return_value=True)
@@ -91,6 +127,7 @@ class SimulatedTest(unittest.TestCase):
         mock_runner.ex.available_to_lay = [{"price": 13, "size": 120}]
         mock__get_runner.return_value = mock_runner
         resp = self.simulated.place(mock_client, mock_market_book, {}, 1)
+        self.assertEqual(self.simulated.market_version, mock_market_book.version)
         self.assertEqual(resp.average_price_matched, 12)
         self.assertEqual(resp.size_matched, 2)
         self.assertEqual(
@@ -179,26 +216,81 @@ class SimulatedTest(unittest.TestCase):
         self.assertEqual(resp.error_code, "BET_LAPSED_PRICE_IMPROVEMENT_TOO_LARGE")
         self.assertEqual(self.simulated.matched, [])
 
-    def test_place_else(self):
+    @mock.patch("flumine.backtest.simulated.Simulated._get_runner")
+    def test_place_limit_removed_runner(self, mock__get_runner):
+        mock_client = mock.Mock(best_price_execution=False)
+        self.simulated.order.side = "BACK"
+        mock_market_book = mock.Mock()
+        mock_runner = mock.Mock()
+        mock_runner.ex.available_to_back = [{"price": 10, "size": 120}]
+        mock_runner.ex.available_to_lay = [{"price": 10.5, "size": 120}]
+        mock_runner.status = "REMOVED"
+        mock__get_runner.return_value = mock_runner
+        resp = self.simulated.place(mock_client, mock_market_book, {}, 1)
+        self.assertEqual(resp.status, "FAILURE")
+        self.assertEqual(resp.error_code, "RUNNER_REMOVED")
+        self.assertEqual(self.simulated.matched, [])
+
+    @mock.patch("flumine.backtest.simulated.Simulated._create_place_response")
+    def test_place_else(self, mock__create_place_response):
         mock_client = mock.Mock(best_price_execution=True)
         self.simulated.order.order_type.ORDER_TYPE = OrderTypes.MARKET_ON_CLOSE
         mock_market_book = mock.Mock()
         self.simulated.place(mock_client, mock_market_book, {}, 1)
         self.assertEqual(self.simulated.matched, [])
+        mock__create_place_response.assert_called_with(1)
 
     def test__create_place_response(self):
         resp = self.simulated._create_place_response(
-            1234, "FAILURE", "dubs of the mad skint and british"
+            1234, "FAILURE", error_code="dubs of the mad skint and british"
         )
         self.assertEqual(resp.bet_id, "1234")
         self.assertEqual(resp.status, "FAILURE")
+        self.assertEqual(resp.order_status, "EXECUTABLE")
         self.assertEqual(resp.error_code, "dubs of the mad skint and british")
 
+    @mock.patch(
+        "flumine.backtest.simulated.Simulated.size_remaining",
+        new_callable=mock.PropertyMock,
+        return_value=0,
+    )
+    def test__create_place_response_complete(self, mock_size_remaining):
+        resp = self.simulated._create_place_response(1234)
+        self.assertEqual(resp.bet_id, "1234")
+        self.assertEqual(resp.status, "SUCCESS")
+        self.assertEqual(resp.order_status, "EXECUTION_COMPLETE")
+
     def test_cancel(self):
+        self.simulated.order.update_data = {}
         resp = self.simulated.cancel()
         self.assertEqual(self.simulated.size_cancelled, 2.0)
         self.assertEqual(resp.status, "SUCCESS")
         self.assertEqual(resp.size_cancelled, 2.0)
+
+    def test_cancel_reduction(self):
+        self.simulated.order.update_data = {"size_reduction": 0.50}
+        resp = self.simulated.cancel()
+        self.assertEqual(self.simulated.size_cancelled, 0.50)
+        self.assertEqual(self.simulated.size_remaining, 1.50)
+        self.assertEqual(resp.status, "SUCCESS")
+        self.assertEqual(resp.size_cancelled, 0.50)
+
+    def test_cancel_reduction_multi(self):
+        self.simulated.size_cancelled = 0.10
+        self.simulated.order.update_data = {"size_reduction": 0.50}
+        resp = self.simulated.cancel()
+        self.assertEqual(self.simulated.size_cancelled, 0.60)
+        self.assertEqual(self.simulated.size_remaining, 1.40)
+        self.assertEqual(resp.status, "SUCCESS")
+        self.assertEqual(resp.size_cancelled, 0.50)
+
+    def test_cancel_reduction_greater_than(self):
+        self.simulated.order.update_data = {"size_reduction": 64.0}
+        resp = self.simulated.cancel()
+        self.assertEqual(self.simulated.size_cancelled, 2.00)
+        self.assertEqual(self.simulated.size_remaining, 0.00)
+        self.assertEqual(resp.status, "SUCCESS")
+        self.assertEqual(resp.size_cancelled, 2.00)
 
     def test_cancel_else(self):
         self.simulated.order.order_type.ORDER_TYPE = OrderTypes.MARKET_ON_CLOSE
@@ -221,7 +313,8 @@ class SimulatedTest(unittest.TestCase):
         mock_runner = mock.Mock(selection_id=1234, handicap=1)
         mock_market_book.runners = [mock_runner]
         self.assertEqual(
-            self.simulated._get_runner(mock_market_book), mock_runner,
+            self.simulated._get_runner(mock_market_book),
+            mock_runner,
         )
         mock_runner = mock.Mock(selection_id=134, handicap=1)
         mock_market_book.runners = [mock_runner]
@@ -291,6 +384,27 @@ class SimulatedTest(unittest.TestCase):
         self.assertEqual(self.simulated.matched, [[1234571, 12.2, 2.00]])
         self.assertTrue(self.simulated._bsp_reconciled)
         self.simulated.order.execution_complete.assert_called()
+
+    def test__process_sp_lay(self):
+        mock_runner = mock.Mock()
+        mock_runner.sp.actual_sp = 12.20
+        self.simulated.order.side = "LAY"
+        self.simulated._process_sp(1234571, mock_runner)
+        self.assertEqual(self.simulated.matched, [[1234571, 12.2, 1.96]])
+        self.assertEqual(self.simulated.size_cancelled, 0.04)
+        self.assertTrue(self.simulated._bsp_reconciled)
+        self.simulated.order.execution_complete.assert_called()
+
+    def test__process_sp_lay_liability(self):
+        self.simulated.size_matched = 1.90
+        mock_runner = mock.Mock()
+        mock_runner.sp.actual_sp = 12.20
+        self.simulated.order.side = "LAY"
+        self.simulated._process_sp(1234571, mock_runner)
+        self.assertEqual(self.simulated.matched, [])
+        self.assertEqual(self.simulated.size_lapsed, 0.10)
+        self.assertTrue(self.simulated._bsp_reconciled)
+        self.simulated.order.lapsed.assert_called()
 
     def test__process_sp_none(self):
         mock_runner = mock.Mock()
@@ -483,6 +597,22 @@ class SimulatedTest(unittest.TestCase):
         self.assertEqual(self.simulated.profit, -18.0)
         self.simulated.order.runner_status = "LOSER"
         self.assertEqual(self.simulated.profit, 2.0)
+
+    def test_status(self):
+        self.mock_order.status.value = "EXECUTION_COMPLETE"
+        self.assertEqual(self.simulated.status, "EXECUTION_COMPLETE")
+        self.mock_order.status.value = "PENDING"
+        self.assertEqual(self.simulated.status, "EXECUTABLE")
+
+    def test_info(self):
+        self.assertEqual(
+            self.simulated.info,
+            {
+                "profit": 0,
+                "piq": 0,
+                "matched": [],
+            },
+        )
 
     def test_bool(self):
         self.assertFalse(self.simulated)

@@ -1,6 +1,7 @@
 import uuid
 import logging
 import hashlib
+from collections import defaultdict
 from typing import Optional, Tuple, Callable
 from decimal import Decimal, ROUND_HALF_UP
 from betfairlightweight.resources.bettingresources import MarketBook, RunnerBook
@@ -131,19 +132,38 @@ def price_ticks_away(price: float, n_ticks: int) -> float:
 
 
 # todo LRU cache?
-def calculate_exposure(mb: list, ml: list) -> float:
+# JH: LRU cache does not work with list inputs as they are unhashable.
+#     So might need to refactor mb and ml into tuples.
+def calculate_matched_exposure(mb: list, ml: list) -> Tuple:
     """Calculates exposure based on list
     of (price, size)
+    returns the tuple (profit_if_win, profit_if_lose)
     """
     if not mb and not ml:
-        return 0.0
+        return 0.0, 0.0
     back_exp = sum(-i[1] for i in mb)
     back_profit = sum((i[0] - 1) * i[1] for i in mb)
     lay_exp = sum((i[0] - 1) * -i[1] for i in ml)
     lay_profit = sum(i[1] for i in ml)
     _win = back_profit + lay_exp
     _lose = lay_profit + back_exp
-    return round(min(_win, _lose), 2)
+    return round(_win, 2), round(_lose, 2)
+
+
+def calculate_unmatched_exposure(ub: list, ul: list) -> Tuple:
+    """Calculates worse-case exposure based on list
+    of (price, size)
+    returns the tuple (profit_if_win, profit_if_lose)
+
+    The worst case profit_if_win arises if all lay bets are matched and the selection wins.
+    The worst case profit_if_lose arises if all back bets are matched and the selection loses.
+
+    """
+    if not ub and not ul:
+        return 0.0, 0.0
+    back_exp = sum(-i[1] for i in ub)
+    lay_exp = sum((i[0] - 1) * -i[1] for i in ul)
+    return round(lay_exp, 2), round(back_exp, 2)
 
 
 # todo LRU cache?
@@ -206,8 +226,7 @@ def call_process_market_book(
 def get_runner_book(
     market_book: MarketBook, selection_id: int, handicap=0
 ) -> Optional[RunnerBook]:
-    """Returns runner book based on selection id.
-    """
+    """Returns runner book based on selection id."""
     for runner_book in market_book.runners:
         if (
             runner_book.selection_id == selection_id
@@ -227,3 +246,11 @@ def get_market_notes(market, selection_id: int) -> Optional[str]:
             get_price(runner.ex.available_to_lay, 0),
             runner.last_price_traded,
         )
+
+
+def get_event_ids(markets: list, event_type_id: str) -> list:
+    event_ids = []
+    for market in markets:
+        if not market.closed and market.event_type_id == event_type_id:
+            event_ids.append(market.event_id)
+    return list(set(event_ids))

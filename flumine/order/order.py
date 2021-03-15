@@ -1,6 +1,8 @@
+import json
 import uuid
 import logging
 import datetime
+import string
 from enum import Enum
 from typing import Union, Optional
 from betfairlightweight import filters
@@ -13,6 +15,13 @@ from ..exceptions import OrderUpdateError
 from ..backtest.simulated import Simulated
 
 logger = logging.getLogger(__name__)
+
+
+VALID_BETFAIR_CUSTOMER_ORDER_REF_CHARACTERS = (
+    {"-", ".", "_", "+", "*", ":", ";", "~"}
+    .union(set(string.ascii_letters))
+    .union(set(string.digits))
+)
 
 
 class OrderStatus(Enum):
@@ -40,16 +49,21 @@ class BaseOrder:
         side: str,
         order_type: Union[LimitOrder, LimitOnCloseOrder, MarketOnCloseOrder],
         handicap: float = 0,
+        sep: str = "-",
+        context: dict = None,
     ):
         self.id = str(uuid.uuid1().time)  # 18 char str used as unique customerOrderRef
         self.trade = trade
         self.side = side
         self.order_type = order_type
         self.handicap = handicap
+        self.lookup = self.market_id, self.selection_id, self.handicap
 
         self.runner_status = None  # RunnerBook.status
         self.status = None
         self.status_log = []
+        self.violation_msg = None
+        self.context = context or {}  # store order specific notes/triggers
 
         self.bet_id = None
         self.update_data = {}  # stores cancel/update/replace data
@@ -61,11 +75,16 @@ class BaseOrder:
         self.date_time_created = datetime.datetime.utcnow()
         self.date_time_execution_complete = None
 
+        self._sep = "-"  # DEFAULT VALUE
+        self.sep = sep
+
     # status
     def _update_status(self, status: OrderStatus) -> None:
         self.status_log.append(status)
         self.status = status
         logger.info("Order status update: %s" % self.status.value, extra=self.info)
+        if self.trade.complete and status != OrderStatus.VIOLATION:
+            self.trade.complete_trade()
 
     def placing(self) -> None:
         self._update_status(OrderStatus.PENDING)
@@ -96,8 +115,9 @@ class BaseOrder:
         self._update_status(OrderStatus.VOIDED)
         self.update_data.clear()
 
-    def violation(self) -> None:
+    def violation(self, violation_msg: str) -> None:
         self._update_status(OrderStatus.VIOLATION)
+        self.violation_msg = violation_msg
         self.update_data.clear()
 
     # updates
@@ -141,7 +161,7 @@ class BaseOrder:
 
     @property
     def complete(self) -> bool:
-        """ Returns False if order is
+        """Returns False if order is
         live or pending in the market"""
         if self.status in [
             OrderStatus.PENDING,
@@ -165,6 +185,21 @@ class BaseOrder:
     @property
     def average_price_matched(self) -> float:
         raise NotImplementedError
+
+    @property
+    def sep(self) -> str:
+        return self._sep
+
+    @sep.setter
+    def sep(self, new_sep: str) -> None:
+        if self.is_valid_customer_order_ref_character(new_sep):
+            self._sep = new_sep
+        else:
+            raise ValueError(f"Invalid sep: {new_sep}")
+
+    @staticmethod
+    def is_valid_customer_order_ref_character(c: str) -> bool:
+        return True
 
     @property
     def size_matched(self) -> float:
@@ -202,7 +237,6 @@ class BaseOrder:
                 self.date_time_execution_complete - self.responses.date_time_placed
             ).total_seconds()
 
-    # todo cached properties?
     @property
     def market_id(self) -> str:
         return self.trade.market_id
@@ -212,12 +246,8 @@ class BaseOrder:
         return self.trade.selection_id
 
     @property
-    def lookup(self) -> tuple:
-        return self.market_id, self.selection_id, self.handicap
-
-    @property
     def customer_order_ref(self) -> str:
-        return "{0}-{1}".format(self.trade.strategy.name_hash, self.id)
+        return "{0}{1}{2}".format(self.trade.strategy.name_hash, self.sep, self.id)
 
     @property
     def info(self) -> dict:
@@ -228,6 +258,8 @@ class BaseOrder:
             "id": self.id,
             "customer_order_ref": self.customer_order_ref,
             "bet_id": self.bet_id,
+            "date_time_created": str(self.date_time_created),
+            "publish_time": str(self.publish_time) if self.publish_time else None,
             "trade": self.trade.info,
             "order_type": self.order_type.info,
             "info": {
@@ -239,9 +271,21 @@ class BaseOrder:
                 "size_voided": self.size_voided,
                 "average_price_matched": self.average_price_matched,
             },
+            "responses": {
+                "date_time_placed": str(self.responses.date_time_placed)
+                if self.responses.date_time_placed
+                else None,
+                "elapsed_seconds_executable": self.elapsed_seconds_executable,
+            },
+            "runner_status": self.runner_status,
             "status": self.status.value if self.status else None,
             "status_log": ", ".join([s.value for s in self.status_log]),
+            "violation_msg": self.violation_msg,
+            "simulated": self.simulated.info,
         }
+
+    def json(self) -> str:
+        return json.dumps(self.info)
 
     def __repr__(self):
         return "Order {0}: {1}".format(
@@ -259,7 +303,9 @@ class BetfairOrder(BaseOrder):
         self.placing()
 
     def cancel(self, size_reduction: float = None) -> None:
-        if self.order_type.ORDER_TYPE == OrderTypes.LIMIT:
+        if self.bet_id is None:
+            raise OrderUpdateError("Order does not currently have a betId")
+        elif self.order_type.ORDER_TYPE == OrderTypes.LIMIT:
             if size_reduction and self.size_remaining - size_reduction < 0:
                 raise OrderUpdateError("Size reduction too large")
             if self.status != OrderStatus.EXECUTABLE:
@@ -268,11 +314,13 @@ class BetfairOrder(BaseOrder):
             self.cancelling()
         else:
             raise OrderUpdateError(
-                "Only LIMIT orders can be cancelled or partially cancelled once placed."
+                "Only LIMIT orders can be cancelled or partially cancelled once placed"
             )
 
     def update(self, new_persistence_type: str) -> None:
-        if self.order_type.ORDER_TYPE == OrderTypes.LIMIT:
+        if self.bet_id is None:
+            raise OrderUpdateError("Order does not currently have a betId")
+        elif self.order_type.ORDER_TYPE == OrderTypes.LIMIT:
             if self.order_type.persistence_type == new_persistence_type:
                 raise OrderUpdateError("Persistence types match")
             elif self.status != OrderStatus.EXECUTABLE:
@@ -280,10 +328,15 @@ class BetfairOrder(BaseOrder):
             self.order_type.persistence_type = new_persistence_type
             self.updating()
         else:
-            raise OrderUpdateError("Only LIMIT orders can be updated.")
+            raise OrderUpdateError("Only LIMIT orders can be updated")
 
     def replace(self, new_price: float) -> None:
-        if self.order_type.ORDER_TYPE in [OrderTypes.LIMIT, OrderTypes.LIMIT_ON_CLOSE]:
+        if self.bet_id is None:
+            raise OrderUpdateError("Order does not currently have a betId")
+        elif self.order_type.ORDER_TYPE in [
+            OrderTypes.LIMIT,
+            OrderTypes.LIMIT_ON_CLOSE,
+        ]:
             if self.order_type.price == new_price:
                 raise OrderUpdateError("Prices match")
             elif self.status != OrderStatus.EXECUTABLE:
@@ -292,7 +345,7 @@ class BetfairOrder(BaseOrder):
             self.replacing()
         else:
             raise OrderUpdateError(
-                "Only LIMIT or LIMIT_ON_CLOSE orders can be replaced."
+                "Only LIMIT or LIMIT_ON_CLOSE orders can be replaced"
             )
 
     # instructions
@@ -360,7 +413,15 @@ class BetfairOrder(BaseOrder):
         try:
             return self.current_order.size_remaining or 0.0
         except AttributeError:
-            return 0.0
+            if self.order_type.ORDER_TYPE == OrderTypes.LIMIT:
+                if (
+                    self.size_matched > 0
+                ):  # placeResponse does not include sizeRemaining
+                    return round(self.order_type.size - self.size_matched, 2)
+                else:
+                    return self.order_type.size
+            else:
+                return self.order_type.liability
 
     @property
     def size_cancelled(self) -> float:
@@ -382,3 +443,17 @@ class BetfairOrder(BaseOrder):
             return self.current_order.size_voided or 0.0
         except AttributeError:
             return 0.0
+
+    @staticmethod
+    def is_valid_customer_order_ref_character(c: str) -> bool:
+        """
+        Check if the separator is of length 1, and a valid
+        character, as defined in the Betfair documentation is:
+
+        CustomerRef can contain: upper/lower chars, digits, chars
+         : - . _ + * : ; ~ only.
+        """
+        if len(c) != 1:
+            return False
+        else:
+            return c in VALID_BETFAIR_CUSTOMER_ORDER_REF_CHARACTERS

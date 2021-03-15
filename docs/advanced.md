@@ -38,10 +38,13 @@ The Flumine class can be adapted by overriding the following functions:
 - `max_selection_exposure` Max exposure per selection (including new order), note this does __not__ handle reduction in exposure due to laying another runner
 - `max_order_exposure` Max exposure per order
 - `client` Strategy client, half implemented when flumine will be migrated to multi clients
+- `max_trade_count` Max total number of trades per runner
+- `max_live_trade_count` Max live (with executable orders) trades per runner
+- `multi_order_trades` Allow multiple live orders per trade
 
 ### Functions
 
-The following functions can be overridden dependant on the strategy:
+The following functions can be overridden dependent on the strategy:
 
 `add()` Function called when strategy is added to framework
 
@@ -58,14 +61,6 @@ The following functions can be overridden dependant on the strategy:
 `process_closed_market()` Process Market after closure
 
 `finish()` Function called when framework ends
-
-`place_order()` Places an order by first validating using `validate_order`
-
-`cancel_order()` Cancel an order
-
-`update_order()` Updates an order
-
-`replace_order()` Replaces an order
 
 ### Runner Context
 
@@ -86,11 +81,7 @@ This is created on a per market basis when backtesting.
 
 ### Order Stream
 
-_In development_
-
-### Custom Stream
-
-_In development_
+Subscribes to all orders per running instance using the `config.hostname`
 
 ## Custom Event
 
@@ -100,12 +91,12 @@ Before placing an order flumine will check the client and trading controls, this
 
 ### Client Controls
 
-- `MaxOrderCount`: Checks order count is not over betfair transaction limit (1000) 
+- `MaxTransactionCount`: Checks transaction count is not over betfair transaction limit (5000 per hour) 
 
 ### Trading Controls
 
 - `OrderValidation`: Checks order is valid (size/odds)
-- `StrategyExposure`: Checks order does not go over `strategy.max_order_exposure` and `strategy.max_selection_exposure`
+- `StrategyExposure`: Checks order does not invalidate `strategy.validate_order`, `strategy.max_order_exposure` or `strategy.max_selection_exposure`
 
 ## Logging Controls
 
@@ -126,8 +117,8 @@ framework.add_logging_control(control)
 
 By default flumine adds the following workers:
  
-- `keep_alive`: runs every 1200s to make sure the client is either logged in or kept alive
-- `poll_account_balance`: runs every 60s to poll account balance endpoint
+- `keep_alive`: runs every 1200s (or session_timeout/2) to make sure the client is either logged in or kept alive
+- `poll_account_balance`: runs every 120s to poll account balance endpoint
 - `poll_market_catalogue`: runs every 60s to poll listMarketCatalogue endpoint
 - `poll_cleared_orders`: runs when closed market is added to `flumine.cleared_market_queue`
 
@@ -139,7 +130,7 @@ from flumine.worker import BackgroundWorker
 def func(a): print(a)
 
 worker = BackgroundWorker(
-    interval=10, function=func, func_args=("hello",), name="print_a"
+    framework, interval=10, function=func, func_args=("hello",), name="print_a"
 )
 
 framework.add_worker(
@@ -176,9 +167,17 @@ logger.setLevel(logging.INFO)
 
 ## Config
 
+### simulated
+
+Updated to True when backtesting or paper trading
+
+### instance_id
+
+Store server id or similar (e.g. AWS ec2 instanceId)
+
 ### hostname
 
-Used as customerStrategyRefs so that only orders created by the running instance is returned.
+Used as customerStrategyRefs so that only orders created by the running instance are returned.
 
 ### process_id
 
@@ -188,6 +187,14 @@ OS process id of running application.
 
 Used for backtesting
 
-### current_time
+### raise_errors
 
 Raises errors on strategy functions, see [Error Handling](/advanced/#error-handling)
+
+### max_execution_workers
+
+Max number of workers in execution thread pool
+
+### async_place_orders
+
+Place orders sent with place orders flag, prevents waiting for bet delay

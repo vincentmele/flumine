@@ -4,9 +4,10 @@ from unittest import mock
 
 from flumine.controls.clientcontrols import (
     BaseControl,
-    MaxOrderCount,
+    MaxTransactionCount,
     OrderPackageType,
 )
+from flumine.exceptions import ControlError
 
 
 class TestBaseControl(unittest.TestCase):
@@ -21,117 +22,77 @@ class TestBaseControl(unittest.TestCase):
 
     @mock.patch("flumine.controls.BaseControl._validate")
     def test_call(self, mock_validate):
-        order_package = mock.Mock()
-        self.control(order_package)
-
-        mock_validate.assert_called_with(order_package)
+        order = mock.Mock()
+        self.control(order, OrderPackageType.PLACE)
+        mock_validate.assert_called_with(order, OrderPackageType.PLACE)
 
     def test_validate(self):
         with self.assertRaises(NotImplementedError):
-            self.control._validate(None)
+            self.control._validate(None, None)
 
     def test_on_error(self):
         order = mock.Mock()
         order.info = {"hello": "world"}
-        self.control._on_error(order, "test")
-        order.violation.assert_called_with()
-
-    def test_on_error_offset(self):
-        order = mock.Mock()
-        order.info = {"hello": "world"}
-        self.control._on_error(order, "test")
-        order.violation.assert_called_with()
+        with self.assertRaises(ControlError):
+            self.control._on_error(order, "test")
+        order.violation.assert_called_with("Order has violated: None Error: test")
 
 
-class TestMaxOrderCount(unittest.TestCase):
+class TestMaxTransactionCount(unittest.TestCase):
     def setUp(self):
         self.mock_client = mock.Mock()
         self.mock_client.transaction_limit = 1000
         self.mock_client.chargeable_transaction_count = 0
         self.mock_flumine = mock.Mock()
-        self.trading_control = MaxOrderCount(self.mock_flumine, self.mock_client)
+        self.trading_control = MaxTransactionCount(self.mock_flumine, self.mock_client)
 
-    @mock.patch("flumine.controls.clientcontrols.MaxOrderCount._set_next_hour")
-    def test_init(self, mock_set_next_hour):
+    def test_init(self):
         self.assertEqual(self.trading_control.client, self.mock_client)
-        self.assertEqual(self.trading_control.NAME, "MAX_ORDER_COUNT")
-        self.assertEqual(self.trading_control.total, 0)
-        self.assertEqual(self.trading_control.place_requests, 0)
-        self.assertEqual(self.trading_control.update_requests, 0)
-        self.assertEqual(self.trading_control.cancel_requests, 0)
-        self.assertEqual(self.trading_control.replace_requests, 0)
-
-        self.assertIsNotNone(self.trading_control._next_hour)
+        self.assertEqual(self.trading_control.NAME, "MAX_TRANSACTION_COUNT")
+        self.assertIsNone(self.trading_control._next_hour)
+        self.assertEqual(self.trading_control.current_transaction_count, 0)
+        self.assertEqual(self.trading_control.current_failed_transaction_count, 0)
         self.assertEqual(self.trading_control.transaction_count, 0)
-        self.assertEqual(self.trading_control.transaction_limit, 1000)
+        self.assertEqual(self.trading_control.failed_transaction_count, 0)
 
-    @mock.patch(
-        "flumine.controls.clientcontrols.MaxOrderCount._check_transaction_count"
-    )
-    @mock.patch("flumine.controls.clientcontrols.MaxOrderCount._check_hour")
-    def test_validate_place(self, mock_check_hour, mock__check_transaction_count):
-        mock_package = mock.Mock()
-        mock_package.package_type = OrderPackageType.PLACE
-        mock_package.__len__ = mock.Mock()
-        mock_package.__len__.return_value = 1
-        self.trading_control._validate(mock_package)
+    def test_add_transaction(self):
+        self.trading_control.add_transaction(123)
+        self.assertEqual(self.trading_control.transaction_count, 123)
+        self.assertEqual(self.trading_control.current_transaction_count, 123)
+        self.trading_control.add_transaction(123, True)
+        self.assertEqual(self.trading_control.failed_transaction_count, 123)
+        self.assertEqual(self.trading_control.current_failed_transaction_count, 123)
+        self.trading_control.add_transaction(123)
+        self.assertEqual(self.trading_control.transaction_count, 246)
+        self.assertEqual(self.trading_control.current_transaction_count, 246)
 
-        mock_check_hour.assert_called_with()
-        mock__check_transaction_count.assert_called_with(1)
-        self.assertEqual(self.trading_control.place_requests, 1)
+    @mock.patch("flumine.controls.clientcontrols.MaxTransactionCount._check_hour")
+    def test_validate(self, mock_check_hour):
+        mock_order = mock.Mock()
+        self.trading_control._validate(mock_order, OrderPackageType.PLACE)
+        mock_check_hour.assert_called()
 
-    @mock.patch("flumine.controls.clientcontrols.MaxOrderCount._check_hour")
-    def test_validate_cancel(self, mock_check_hour):
-        mock_package = mock.Mock()
-        mock_package.package_type = OrderPackageType.CANCEL
-        mock_package.__len__ = mock.Mock()
-        mock_package.__len__.return_value = 1
-        self.trading_control._validate(mock_package)
-
-        mock_check_hour.assert_called_with()
-        self.assertEqual(self.trading_control.cancel_requests, 1)
-
-    @mock.patch("flumine.controls.clientcontrols.MaxOrderCount._check_hour")
-    def test_validate_update(self, mock_check_hour):
-        mock_package = mock.Mock()
-        mock_package.package_type = OrderPackageType.UPDATE
-        mock_package.__len__ = mock.Mock()
-        mock_package.__len__.return_value = 1
-        self.trading_control._validate(mock_package)
-
-        mock_check_hour.assert_called_with()
-        self.assertEqual(self.trading_control.update_requests, 1)
-
-    @mock.patch("flumine.controls.clientcontrols.MaxOrderCount._check_hour")
-    def test_validate_replace(self, mock_check_hour):
-        mock_package = mock.Mock()
-        mock_package.package_type = OrderPackageType.REPLACE
-        mock_package.__len__ = mock.Mock()
-        mock_package.__len__.return_value = 1
-        self.trading_control._validate(mock_package)
-
-        mock_check_hour.assert_called_with()
-        self.assertEqual(self.trading_control.replace_requests, 1)
-
-    @mock.patch("flumine.controls.clientcontrols.MaxOrderCount._set_next_hour")
+    @mock.patch("flumine.controls.clientcontrols.MaxTransactionCount._set_next_hour")
     def test_check_hour(self, mock_set_next_hour):
+        self.trading_control._next_hour = datetime.datetime.utcnow()
         self.trading_control._check_hour()
 
-        self.trading_control.transaction_count = 1069
         now = datetime.datetime.now()
         self.trading_control._next_hour = (now + datetime.timedelta(hours=-1)).replace(
             minute=0, second=0, microsecond=0
         )
         self.trading_control._check_hour()
         mock_set_next_hour.assert_called_with()
-        self.assertEqual(self.trading_control.transaction_count, 0)
-        self.assertEqual(self.mock_client.chargeable_transaction_count, 69)
 
-    def test_check_transaction_count(self):
-        self.trading_control._check_transaction_count(10)
-        self.assertEqual(self.trading_control.transaction_count, 10)
+    @mock.patch("flumine.controls.clientcontrols.MaxTransactionCount._set_next_hour")
+    def test_check_hour_none(self, mock_set_next_hour):
+        self.trading_control._next_hour = None
+        self.trading_control._check_hour()
+        mock_set_next_hour.assert_called_with()
 
     def test_set_next_hour(self):
+        self.trading_control.current_transaction_count = 5069
+        self.trading_control.current_failed_transaction_count = 5069
         self.trading_control._next_hour = None
 
         self.trading_control._set_next_hour()
@@ -140,19 +101,27 @@ class TestMaxOrderCount(unittest.TestCase):
             minute=0, second=0, microsecond=0
         )
         self.assertEqual(self.trading_control._next_hour, now_1)
+        self.assertEqual(self.trading_control.current_transaction_count, 0)
+        self.assertEqual(self.trading_control.current_failed_transaction_count, 0)
 
-    @mock.patch("flumine.controls.clientcontrols.MaxOrderCount._check_hour")
-    def test_safe(self, mock_check_hour):
+    def test_safe(self):
         self.assertTrue(self.trading_control.safe)
-        mock_check_hour.assert_called_with()
 
         self.trading_control.client.transaction_limit = -10
         self.assertFalse(self.trading_control.safe)
-        mock_check_hour.assert_called_with()
 
         self.trading_control.client.transaction_limit = None
         self.assertTrue(self.trading_control.safe)
-        mock_check_hour.assert_called_with()
+
+    def test_current_transaction_count_total(self):
+        self.trading_control.current_transaction_count = 1
+        self.trading_control.current_failed_transaction_count = 2
+        self.assertEqual(self.trading_control.current_transaction_count_total, 3)
+
+    def test_transaction_count_total(self):
+        self.trading_control.transaction_count = 1
+        self.trading_control.failed_transaction_count = 2
+        self.assertEqual(self.trading_control.transaction_count_total, 3)
 
     def test_transaction_limit(self):
         self.assertEqual(

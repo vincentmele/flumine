@@ -31,9 +31,6 @@ class Flumine(BaseFlumine):
                 elif event.EVENT_TYPE == EventType.CURRENT_ORDERS:
                     self._process_current_orders(event)
 
-                elif event.EVENT_TYPE == EventType.ORDER_PACKAGE:
-                    self._process_order_package(event)
-
                 elif event.EVENT_TYPE == EventType.CLEARED_MARKETS:
                     self._process_cleared_markets(event)
 
@@ -46,15 +43,17 @@ class Flumine(BaseFlumine):
                 elif event.EVENT_TYPE == EventType.CUSTOM_EVENT:
                     self._process_custom_event(event)
 
-                elif event.EVENT_TYPE == EventType.NEW_DAY:
-                    logger.info(event)
-
                 else:
                     logger.error("Unknown item in handler_queue: %s" % str(event))
 
+                del event
+
     def _add_default_workers(self):
+        ka_interval = min((self.client.betting_client.session_timeout / 2), 1200)
         self.add_worker(
-            worker.BackgroundWorker(self, function=worker.keep_alive, interval=1200)
+            worker.BackgroundWorker(
+                self, function=worker.keep_alive, interval=ka_interval
+            )
         )
         self.add_worker(
             worker.BackgroundWorker(
@@ -75,8 +74,8 @@ class Flumine(BaseFlumine):
         self.add_worker(
             worker.BackgroundWorker(
                 self,
-                function=worker.poll_cleared_orders,
-                interval=10,  # restart
+                function=worker.poll_market_closure,
+                interval=60,
                 start_delay=10,  # wait for login
             )
         )

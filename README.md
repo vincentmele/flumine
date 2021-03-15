@@ -1,6 +1,6 @@
 # flūmine
 
-[![Build Status](https://travis-ci.org/liampauling/flumine.svg?branch=master)](https://travis-ci.org/liampauling/flumine) [![Coverage Status](https://coveralls.io/repos/github/liampauling/flumine/badge.svg?branch=master)](https://coveralls.io/github/liampauling/flumine?branch=master) [![PyPI version](https://badge.fury.io/py/flumine.svg)](https://pypi.python.org/pypi/flumine)
+![test](https://github.com/liampauling/flumine/workflows/test/badge.svg) [![Coverage Status](https://coveralls.io/repos/github/liampauling/flumine/badge.svg?branch=master)](https://coveralls.io/github/liampauling/flumine?branch=master) [![PyPI version](https://badge.fury.io/py/flumine.svg)](https://pypi.python.org/pypi/flumine)
 
 
 Betfair trading framework with a focus on:
@@ -11,13 +11,15 @@ Betfair trading framework with a focus on:
 - rock-solid
 - safe
 
-Support for market and custom streaming data (order, score and custom polling data in development)
+![Backtesting Analysis](docs/images/jupyterloggingcontrol-screenshot.png?raw=true "Jupyter Logging Control Screenshot")
+
+Support for market, order and custom streaming data.
 
 [docs](https://liampauling.github.io/flumine/)
 
 [join slack group](https://betfairlightweight.herokuapp.com)
 
-Currently tested on Python 3.6, 3.7 and 3.8.
+Tested on Python 3.6, 3.7, 3.8 and 3.9.
 
 ## installation
 
@@ -77,17 +79,17 @@ class ExampleStrategy(BaseStrategy):
                     side="LAY", 
                     order_type=LimitOrder(price=1.01, size=2.00)
                 )
-                self.place_order(market, order)
+                market.place_order(order)
 
     def process_orders(self, market: Market, orders: list) -> None:
         for order in orders:
             if order.status == OrderStatus.EXECUTABLE:
                 if order.size_remaining == 2.00:
-                    self.cancel_order(market, order, 0.02)  # reduce size to 1.98
-                if order.order_type.persistence_type == 'LAPSE':
-                    self.update_order(market, order, 'PERSIST')
+                    market.cancel_order(order, 0.02)  # reduce size to 1.98
+                if order.order_type.persistence_type == "LAPSE":
+                    market.update_order(order, "PERSIST")
                 if order.size_remaining > 0:
-                    self.replace_order(market, order, 1.02)  # move
+                    market.replace_order(order, 1.02)  # move
 
 
 strategy = ExampleStrategy(
@@ -114,7 +116,6 @@ framework.run()
 - Order execution
 - Paper trading
 - Back testing
-- Analytics (in development)
 - Middleware and background workers to enable Scores / RaceCard / InPlayService
 
 ## Dependencies

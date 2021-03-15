@@ -16,8 +16,7 @@ class SimulatedExecution(BaseExecution):
     REPLACE_LATENCY = 0.280
 
     def handler(self, order_package: BaseOrderPackage) -> None:
-        """ Only uses _thread_pool if paper_trade
-        """
+        """Only uses _thread_pool if paper_trade"""
         if order_package.package_type == OrderPackageType.PLACE:
             func = self.execute_place
         elif order_package.package_type == OrderPackageType.CANCEL:
@@ -39,12 +38,12 @@ class SimulatedExecution(BaseExecution):
     ) -> None:
         if order_package.client.paper_trade:
             time.sleep(order_package.bet_delay + self.PLACE_LATENCY)
-        market_book = order_package.market.market_book
+        market = self.flumine.markets.markets[order_package.market_id]
         for order, instruction in zip(order_package, order_package.place_instructions):
             with order.trade:
                 self._bet_id += 1
                 simulated_response = order.simulated.place(
-                    order_package.client, market_book, instruction, self._bet_id
+                    order_package.client, market.market_book, instruction, self._bet_id
                 )
                 self._order_logger(
                     order, simulated_response, order_package.package_type
@@ -54,11 +53,15 @@ class SimulatedExecution(BaseExecution):
                 elif simulated_response.status == "FAILURE":
                     order.lapsed()
 
+        # update transaction counts
+        order_package.client.add_transaction(len(order_package))
+
     def execute_cancel(
         self, order_package, http_session: Optional[requests.Session]
     ) -> None:
         if order_package.client.paper_trade:
             time.sleep(self.CANCEL_LATENCY)
+        failed_transaction_count = 0
         for order in order_package:
             with order.trade:
                 simulated_response = order.simulated.cancel()
@@ -66,15 +69,24 @@ class SimulatedExecution(BaseExecution):
                     order, simulated_response, order_package.package_type
                 )
                 if simulated_response.status == "SUCCESS":
-                    order.execution_complete()
+                    if order.size_remaining == 0:
+                        order.execution_complete()
+                    else:
+                        order.executable()
                 elif simulated_response.status == "FAILURE":
                     order.executable()
+                    failed_transaction_count += 1
+
+        # update transaction counts
+        if failed_transaction_count:
+            order_package.client.add_transaction(failed_transaction_count, failed=True)
 
     def execute_update(
         self, order_package, http_session: Optional[requests.Session]
     ) -> None:
         if order_package.client.paper_trade:
             time.sleep(self.UPDATE_LATENCY)
+        failed_transaction_count = 0
         for order, instruction in zip(order_package, order_package.update_instructions):
             with order.trade:
                 simulated_response = order.simulated.update(instruction)
@@ -85,6 +97,11 @@ class SimulatedExecution(BaseExecution):
                     order.executable()
                 elif simulated_response.status == "FAILURE":
                     order.executable()
+                    failed_transaction_count += 1
+
+        # update transaction counts
+        if failed_transaction_count:
+            order_package.client.add_transaction(failed_transaction_count, failed=True)
 
     def execute_replace(
         self, order_package, http_session: Optional[requests.Session]
@@ -93,7 +110,8 @@ class SimulatedExecution(BaseExecution):
             order_package.client.paper_trade
         ):  # todo should the cancel happen without a delay?
             time.sleep(order_package.bet_delay + self.REPLACE_LATENCY)
-        market_book = order_package.market.market_book
+        failed_transaction_count = 0
+        market = self.flumine.markets.markets[order_package.market_id]
         for order, instruction in zip(
             order_package, order_package.replace_instructions
         ):
@@ -104,19 +122,24 @@ class SimulatedExecution(BaseExecution):
                     order.execution_complete()
                 elif cancel_instruction_report.status == "FAILURE":
                     order.executable()  # todo do not carry out replace
+                    failed_transaction_count += 1
                 else:
                     order.lapsed()  # todo do not carry out replace
                 self._order_logger(
-                    order, cancel_instruction_report, OrderPackageType.CANCEL,
+                    order,
+                    cancel_instruction_report,
+                    OrderPackageType.CANCEL,
                 )
 
                 # place new order
                 self._bet_id += 1
                 replacement_order = order.trade.create_order_replacement(
-                    order, instruction.get("newPrice")
+                    order,
+                    instruction.get("newPrice"),
+                    cancel_instruction_report.size_cancelled,
                 )
                 place_instruction_report = replacement_order.simulated.place(
-                    order_package.client, market_book, instruction, self._bet_id
+                    order_package.client, market.market_book, instruction, self._bet_id
                 )
                 if place_instruction_report.status == "SUCCESS":
                     self._order_logger(
@@ -125,8 +148,12 @@ class SimulatedExecution(BaseExecution):
                         order_package.package_type,
                     )
                     # add to blotter
-                    market = order_package.market
                     market.place_order(replacement_order, execute=False)
                     replacement_order.executable()
                 elif place_instruction_report.status == "FAILURE":
                     order.executable()
+
+        # update transaction counts
+        order_package.client.add_transaction(len(order_package))
+        if failed_transaction_count:
+            order_package.client.add_transaction(failed_transaction_count, failed=True)

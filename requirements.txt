@@ -1,6 +1,6 @@
-betfairlightweight==2.7.2
+betfairlightweight==2.12.1
 tenacity==5.0.3
-python-json-logger==0.1.11
+python-json-logger==2.0.1
 requests
 dynaconf
 

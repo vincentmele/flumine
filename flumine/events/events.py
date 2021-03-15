@@ -3,6 +3,7 @@ from enum import Enum
 
 
 class EventType(Enum):
+    CONFIG = "Config"
     TERMINATOR = "Terminator"
     # betfair objects
     MARKET_CATALOGUE = "MarketCatalogue"
@@ -21,7 +22,6 @@ class EventType(Enum):
     ORDER_PACKAGE = "Order package"
     CLOSE_MARKET = "Closed market"
     CUSTOM_EVENT = "Custom event"
-    NEW_DAY = "New day"
 
 
 class QueueType(Enum):
@@ -92,12 +92,12 @@ class CustomEvent(BaseEvent):
         self.callback = callback
 
 
-class NewDayEvent(BaseEvent):
-    EVENT_TYPE = EventType.NEW_DAY
-    QUEUE_TYPE = QueueType.HANDLER
-
-
 # LOGGING
+
+
+class ConfigEvent(BaseEvent):
+    EVENT_TYPE = EventType.CONFIG
+    QUEUE_TYPE = QueueType.LOGGING
 
 
 class ClearedOrdersMetaEvent(BaseEvent):

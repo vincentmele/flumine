@@ -2,7 +2,7 @@ import logging
 from collections import defaultdict
 from betfairlightweight.resources.bettingresources import RunnerBook
 
-from ..order.order import OrderStatus
+from ..order.order import OrderStatus, OrderTypes
 from ..utils import get_price, wap
 
 logger = logging.getLogger(__name__)
@@ -37,9 +37,13 @@ class SimulatedMiddleware(Middleware):
     def __call__(self, market) -> None:
         market_analytics = self.markets[market.market_id]
         runner_removals = []  # [(selectionId, handicap, adjustmentFactor)..]
+        # optimisation to only process a runner on an update
+        runner_updates = self._process_streaming_update(market.market_book)
+
         for runner in market.market_book.runners:
             if runner.status == "ACTIVE":
-                self._process_runner(market_analytics, runner)
+                update = bool(runner.selection_id in runner_updates)
+                self._process_runner(market_analytics, runner, update)
             elif runner.status == "REMOVED":
                 _removal = (
                     runner.selection_id,
@@ -86,24 +90,23 @@ class SimulatedMiddleware(Middleware):
                     order.simulated.size_matched = 0
                     order.simulated.average_price_matched = 0
                     order.simulated.matched = []
-                    order.simulated.size_voided = order.order_type.size
+                    if order.order_type.ORDER_TYPE == OrderTypes.LIMIT:
+                        order.simulated.size_voided = order.order_type.size
+                    else:
+                        order.simulated.size_voided = order.order_type.liability
                     logger.warning(
                         "Order voided on non runner {0}".format(order.selection_id),
                         extra=order.info,
                     )
                 else:
-                    if order.status == OrderStatus.EXECUTABLE:
-                        # todo cancel if not PERSIST
-                        # todo does a market version bump occur if withdrawal is below the limit?
-                        pass
                     if (
                         removal_adjustment_factor
                         and removal_adjustment_factor >= WIN_MINIMUM_ADJUSTMENT_FACTOR
                     ):
                         # todo place market
                         for match in order.simulated.matched:
-                            match[1] = round(
-                                match[1] * (1 - (removal_adjustment_factor / 100)), 2
+                            match[1] = self._calculate_reduction_factor(
+                                match[1], removal_adjustment_factor
                             )
                         _, order.simulated.average_price_matched = wap(
                             order.simulated.matched
@@ -116,6 +119,20 @@ class SimulatedMiddleware(Middleware):
                         )
 
     @staticmethod
+    def _process_streaming_update(market_book) -> list:
+        # return list of runners that have been updated
+        update = market_book.streaming_update
+        if update.get("img") or update.get("marketDefinition"):
+            return [runner.selection_id for runner in market_book.runners]
+        else:
+            return [runner["id"] for runner in update.get("rc", [])]
+
+    @staticmethod
+    def _calculate_reduction_factor(price: float, adjustment_factor: float) -> float:
+        price_adjusted = round(price * (1 - (adjustment_factor / 100)), 2)
+        return max(price_adjusted, 1.01)  # min: 1.01
+
+    @staticmethod
     def _process_simulated_orders(market, market_analytics: dict) -> None:
         for order in market.blotter.live_orders:
             if order.simulated and order.status == OrderStatus.EXECUTABLE:
@@ -125,50 +142,57 @@ class SimulatedMiddleware(Middleware):
                 order.simulated(market.market_book, runner_analytics)
 
     @staticmethod
-    def _process_runner(market_analytics: dict, runner: RunnerBook) -> None:
+    def _process_runner(
+        market_analytics: dict, runner: RunnerBook, update: bool
+    ) -> None:
         try:
             runner_analytics = market_analytics[(runner.selection_id, runner.handicap)]
         except KeyError:
             runner_analytics = market_analytics[
                 (runner.selection_id, runner.handicap)
             ] = RunnerAnalytics(runner)
-        runner_analytics(runner)
+        runner_analytics(runner, update)
 
 
 class RunnerAnalytics:
     def __init__(self, runner: RunnerBook):
         self._runner = runner
-        self.traded = {}  # price: size traded since last event
-        self.middle = None  # middle of odds at last event
-        self.matched = 0  # amount matched since last event
+        self.traded = {}  # price: size traded since last update
+        self.middle = None  # middle of odds at last update
+        self.matched = 0  # amount matched since last update
         self._traded_volume = runner.ex.traded_volume
+        self._p_v = {
+            i["price"]: i["size"] for i in runner.ex.traded_volume
+        }  # cached current volume
 
-    def __call__(self, runner: RunnerBook):
-        self.middle = self._calculate_middle(self._runner)  # use last event
-        self.matched = self._calculate_matched(runner)
-        self.traded = self._calculate_traded(runner)
-        self._traded_volume = runner.ex.traded_volume
-        self._runner = runner
+    def __call__(self, runner: RunnerBook, update: bool):
+        if update:
+            self.middle = self._calculate_middle(self._runner)  # use last update
+            self.matched = self._calculate_matched(runner)
+            self.traded = self._calculate_traded(runner.ex.traded_volume)
+            self._traded_volume = runner.ex.traded_volume
+            self._runner = runner
+        else:
+            self.matched = 0
+            self.traded = {}
 
-    def _calculate_traded(self, runner: RunnerBook) -> dict:
-        if self._traded_volume == runner.ex.traded_volume:
+    def _calculate_traded(self, traded_volume: list) -> dict:
+        if self._traded_volume == traded_volume:
             return {}
         else:
-            c_v, p_v, traded = {}, {}, {}
-            # create dictionaries
-            for i in runner.ex.traded_volume:
-                c_v[i["price"]] = i["size"]
-            for i in self._traded_volume:
-                p_v[i["price"]] = i["size"]  # todo cache from previous run?
+            p_v, traded = self._p_v, {}
+            # create dictionary
+            c_v = {i["price"]: i["size"] for i in traded_volume}
             # calculate difference
-            for key in c_v.keys():
+            for key, value in c_v.items():
                 if key in p_v:
-                    new_value = float(c_v[key]) - float(p_v[key])
+                    new_value = float(value) - float(p_v[key])
+                    if new_value > 0:
+                        traded[key] = round(new_value, 2)
                 else:
-                    new_value = float(c_v[key])
-                if new_value > 0:
-                    new_value = round(new_value, 2)
-                    traded[key] = new_value
+                    traded[key] = value
+            # cache for next update
+            self._p_v = c_v
             return traded
 
     @staticmethod

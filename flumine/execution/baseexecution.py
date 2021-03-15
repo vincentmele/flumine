@@ -8,7 +8,6 @@ from ..events.events import OrderEvent
 
 logger = logging.getLogger(__name__)
 
-MAX_WORKERS = 16
 MAX_SESSION_AGE = 200  # seconds since last request
 BET_ID_START = 100000000000  # simulated start betId->
 
@@ -17,7 +16,7 @@ class BaseExecution:
 
     EXCHANGE = None
 
-    def __init__(self, flumine, max_workers: int = MAX_WORKERS):
+    def __init__(self, flumine, max_workers: int = None):
         self.flumine = flumine
         self._max_workers = max_workers
         self._thread_pool = ThreadPoolExecutor(max_workers=self._max_workers)
@@ -26,7 +25,7 @@ class BaseExecution:
         self._sessions_created = 0
 
     def handler(self, order_package: BaseOrderPackage):
-        """ Handles order_package, capable of place, cancel,
+        """Handles order_package, capable of place, cancel,
         replace and update.
         """
         http_session = self._get_http_session()
@@ -88,6 +87,7 @@ class BaseExecution:
                 "session": session,
                 "session_time_created": session.time_created,
                 "session_time_returned": session.time_returned,
+                "live_sessions_count": len(self._sessions),
             },
         )
         return session
@@ -97,16 +97,16 @@ class BaseExecution:
     ) -> None:
         if err or len(self._sessions) >= self._max_workers:
             logger.info(
-                "Closing and deleting requests.Session",
+                "Deleting requests.Session",
                 extra={
                     "sessions_created": self._sessions_created,
                     "session": http_session,
                     "session_time_created": http_session.time_created,
                     "session_time_returned": http_session.time_returned,
+                    "live_sessions_count": len(self._sessions),
                     "err": err,
                 },
             )
-            http_session.close()
             del http_session
         else:
             http_session.time_returned = time.time()
@@ -126,8 +126,9 @@ class BaseExecution:
         )
         if package_type == OrderPackageType.PLACE:
             order.responses.placed(instruction_report)
-            order.bet_id = instruction_report.bet_id
-            self.flumine.log_control(OrderEvent(order))
+            if instruction_report.bet_id:
+                order.bet_id = instruction_report.bet_id
+                self.flumine.log_control(OrderEvent(order))
         elif package_type == OrderPackageType.CANCEL:
             order.responses.cancelled(instruction_report)
         elif package_type == OrderPackageType.UPDATE:
@@ -136,10 +137,6 @@ class BaseExecution:
             order.responses.placed(instruction_report)
             order.bet_id = instruction_report.bet_id
             self.flumine.log_control(OrderEvent(order))
-
-    @property
-    def handler_queue(self):
-        return self.flumine.handler_queue
 
     def shutdown(self):
         logger.info("Shutting down Execution (%s)" % self.__class__.__name__)

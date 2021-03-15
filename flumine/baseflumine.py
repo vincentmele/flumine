@@ -1,3 +1,4 @@
+import time
 import queue
 import logging
 import threading
@@ -15,11 +16,10 @@ from .markets.middleware import Middleware, SimulatedMiddleware
 from .execution.betfairexecution import BetfairExecution
 from .execution.simulatedexecution import SimulatedExecution
 from .order.process import process_current_orders
-from .controls.clientcontrols import BaseControl, MaxOrderCount
+from .controls.clientcontrols import BaseControl, MaxTransactionCount
 from .controls.tradingcontrols import OrderValidation, StrategyExposure
 from .controls.loggingcontrols import LoggingControl
 from . import config, utils
-
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,6 @@ class BaseFlumine:
 
         # queues
         self.handler_queue = queue.Queue()
-        self.cleared_market_queue = queue.Queue()
 
         # all markets
         self.markets = Markets()
@@ -57,19 +56,21 @@ class BaseFlumine:
         self.streams.add_client(client)
 
         # order execution class
-        self.simulated_execution = SimulatedExecution(self)
-        self.betfair_execution = BetfairExecution(self)
+        self.simulated_execution = SimulatedExecution(
+            self, config.max_execution_workers
+        )
+        self.betfair_execution = BetfairExecution(self, config.max_execution_workers)
 
         # logging controls (e.g. database logger)
         self._logging_controls = []
 
         # trading controls
-        self._trading_controls = []
+        self.trading_controls = []
         # add default controls (processed in order)
         self.add_trading_control(OrderValidation)
         self.add_trading_control(StrategyExposure)
         # register default client controls (processed in order)
-        self.add_client_control(MaxOrderCount)
+        self.add_client_control(MaxTransactionCount)
 
         # workers
         self._workers = []
@@ -93,7 +94,7 @@ class BaseFlumine:
 
     def add_trading_control(self, trading_control: Type[BaseControl], **kwargs) -> None:
         logger.info("Adding trading control {0}".format(trading_control.NAME))
-        self._trading_controls.append(trading_control(self, **kwargs))
+        self.trading_controls.append(trading_control(self, **kwargs))
 
     def add_market_middleware(self, middleware: Middleware) -> None:
         logger.info("Adding market middleware {0}".format(middleware))
@@ -113,15 +114,29 @@ class BaseFlumine:
     def _process_market_books(self, event: events.MarketBookEvent) -> None:
         for market_book in event.event:
             market_id = market_book.market_id
-            if market_book.status == "CLOSED":
-                self.handler_queue.put(events.CloseMarketEvent(market_book))
-                continue
+
+            # check latency (only if marketBook is from a stream update)
+            if market_book.streaming_snap is False:
+                latency = time.time() - (market_book.publish_time_epoch / 1e3)
+                if latency > 2:
+                    logger.warning(
+                        "High latency between current time and MarketBook publish time",
+                        extra={
+                            "market_id": market_id,
+                            "latency": latency,
+                            "pt": market_book.publish_time,
+                        },
+                    )
 
             market = self.markets.markets.get(market_id)
             if market is None:
                 market = self._add_market(market_id, market_book)
             elif market.closed:
                 self.markets.add_market(market_id, market)
+
+            if market_book.status == "CLOSED":
+                self.handler_queue.put(events.CloseMarketEvent(market_book))
+                continue
 
             # process market
             market(market_book)
@@ -136,28 +151,12 @@ class BaseFlumine:
                         strategy.process_market_book, market, market_book
                     )
 
-            self._process_market_orders()
-
-    def _process_market_orders(self) -> None:
-        for market in self.markets:
-            for order_package in market.blotter.process_orders(self.client):
-                self.handler_queue.put(order_package)
-
-    def _process_order_package(self, order_package) -> None:
-        """Validate trading controls and
-        then execute.
-        """
-        for control in self._trading_controls:
-            control(order_package)
-        for control in order_package.client.trading_controls:
-            control(order_package)
-        if order_package.orders:
-            order_package.client.execution.handler(order_package)
-        else:
-            logger.warning("Empty package, not executing", extra=order_package.info)
+    def process_order_package(self, order_package) -> None:
+        """Execute through client."""
+        order_package.client.execution.handler(order_package)
 
     def _add_market(self, market_id: str, market_book: resources.MarketBook) -> Market:
-        logger.info("Adding: {0} to markets".format(market_id), extra=self.info)
+        logger.info("Adding: {0} to markets".format(market_id))
         market = Market(self, market_id, market_book)
         self.markets.add_market(market_id, market)
         for middleware in self._market_middleware:
@@ -168,17 +167,18 @@ class BaseFlumine:
         logger.info("Removing market {0}".format(market.market_id), extra=self.info)
         for middleware in self._market_middleware:
             middleware.remove_market(market)
+        for strategy in self.strategies:
+            strategy.remove_market(market.market_id)
         self.markets.remove_market(market.market_id)
 
     def _process_raw_data(self, event: events.RawDataEvent) -> None:
         stream_id, publish_time, data = event.event
         for datum in data:
-            market, _closed = None, False
             if "id" in datum:
                 market_id = datum["id"]
                 market = self.markets.markets.get(market_id)
                 if market is None:
-                    market = self._add_market(market_id, None)
+                    self._add_market(market_id, None)
                 elif market.closed:
                     self.markets.add_market(market_id, market)
 
@@ -186,14 +186,12 @@ class BaseFlumine:
                     "marketDefinition" in datum
                     and datum["marketDefinition"]["status"] == "CLOSED"
                 ):
-                    market.close_market()
-                    _closed = True
+                    datum["_stream_id"] = stream_id
+                    self.handler_queue.put(events.CloseMarketEvent(datum))
 
             for strategy in self.strategies:
                 if stream_id in strategy.stream_ids:
                     strategy.process_raw_data(publish_time, datum)
-                    if _closed:
-                        strategy.process_closed_market(market, datum)
 
     def _process_market_catalogues(self, event: events.MarketCatalogueEvent) -> None:
         for market_catalogue in event.event:
@@ -203,19 +201,21 @@ class BaseFlumine:
                     market.market_catalogue = market_catalogue
                     self.log_control(events.MarketEvent(market))
                     logger.info(
-                        "Updated marketCatalogue for {0}".format(market.market_id)
+                        "Updated marketCatalogue for {0}".format(market.market_id),
+                        extra=market.info,
                     )
                 else:
                     market.market_catalogue = market_catalogue
+                market.update_market_catalogue = False
 
     def _process_current_orders(self, event: events.CurrentOrdersEvent) -> None:
-        process_current_orders(self.markets, self.strategies, event)  # update state
+        # update state
+        process_current_orders(self.markets, self.strategies, event, self.log_control)
         for market in self.markets:
             if market.closed is False:
                 for strategy in self.strategies:
                     strategy_orders = market.blotter.strategy_orders(strategy)
                     strategy.process_orders(market, strategy_orders)
-        self._process_market_orders()
 
     def _process_custom_event(self, event: events.CustomEvent) -> None:
         try:
@@ -226,11 +226,17 @@ class BaseFlumine:
                     e, event.callback
                 )
             )
-        self._process_market_orders()
 
     def _process_close_market(self, event: events.CloseMarketEvent) -> None:
         market_book = event.event
-        market_id = market_book.market_id
+        if isinstance(market_book, dict):
+            recorder = True
+            market_id = market_book["id"]
+            stream_id = market_book["_stream_id"]
+        else:
+            recorder = False
+            market_id = market_book.market_id
+            stream_id = market_book.streaming_unique_id
         market = self.markets.markets.get(market_id)
         if market is None:
             logger.warning(
@@ -238,16 +244,20 @@ class BaseFlumine:
                 extra={"market_id": market_id, **self.info},
             )
             return
-        market.close_market()
-        market.blotter.process_closed_market(event.event)
+        if market.closed is False:
+            market.close_market()
+        if recorder is False:
+            market.blotter.process_closed_market(event.event)
 
         for strategy in self.strategies:
-            if market_book.streaming_unique_id in strategy.stream_ids:
+            if stream_id in strategy.stream_ids:
                 strategy.process_closed_market(market, event.event)
 
-        self.cleared_market_queue.put(market.market_id)
+        if recorder is False:
+            if self.BACKTEST or self.client.paper_trade:
+                self._process_cleared_orders(events.ClearedOrdersEvent(market))
         self.log_control(event)
-        logger.info("Market closed", extra={"market_id": market.market_id, **self.info})
+        logger.info("Market closed", extra={"market_id": market_id, **self.info})
 
         # check for markets that have been closed for x seconds and remove
         if (
@@ -307,8 +317,6 @@ class BaseFlumine:
             "markets": {
                 "market_count": len(self.markets),
                 "open_market_count": len(self.markets.open_market_ids),
-                "live_orders": self.markets.live_orders,
-                "markets": [m.market_id for m in self.markets],
             },
             "streams": [s for s in self.streams],
             "logging_controls": self._logging_controls,
@@ -334,6 +342,8 @@ class BaseFlumine:
         # start logging controls
         for c in self._logging_controls:
             c.start()
+        # process config (logging)
+        self.log_control(events.ConfigEvent(config))
         # start strategies
         self.strategies.start()
         # start streams
@@ -347,8 +357,11 @@ class BaseFlumine:
         # shutdown thread pools
         self.simulated_execution.shutdown()
         self.betfair_execution.shutdown()
+        # shutdown workers
+        for w in self._workers:
+            w.shutdown()
         # shutdown logging controls
-        self.log_control(events.TerminationEvent(None))
+        self.log_control(events.TerminationEvent(self))
         for c in self._logging_controls:
             if c.is_alive():
                 c.join()

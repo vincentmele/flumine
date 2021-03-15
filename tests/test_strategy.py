@@ -51,6 +51,10 @@ class BaseStrategyTest(unittest.TestCase):
             max_selection_exposure=1,
             max_order_exposure=2,
             client=self.mock_client,
+            max_trade_count=3,
+            max_live_trade_count=4,
+            multi_order_trades=False,
+            log_validation_failures=True,
         )
 
     def test_init(self):
@@ -64,6 +68,27 @@ class BaseStrategyTest(unittest.TestCase):
         self.assertEqual(self.strategy.max_selection_exposure, 1)
         self.assertEqual(self.strategy.max_order_exposure, 2)
         self.assertEqual(self.strategy.client, self.mock_client)
+        self.assertEqual(self.strategy.max_trade_count, 3)
+        self.assertEqual(self.strategy.max_live_trade_count, 4)
+        self.assertEqual(self.strategy.streams, [])
+        self.assertEqual(self.strategy.historic_stream_ids, [])
+        self.assertEqual(self.strategy.name_hash, "a94a8fe5ccb19")
+        self.assertFalse(self.strategy.multi_order_trades)
+        self.assertEqual(strategy.STRATEGY_NAME_HASH_LENGTH, 13)
+        self.assertEqual(
+            strategy.DEFAULT_MARKET_DATA_FILTER,
+            {
+                "fields": [
+                    "EX_ALL_OFFERS",
+                    "EX_TRADED",
+                    "EX_TRADED_VOL",
+                    "EX_LTP",
+                    "EX_MARKET_DEF",
+                    "SP_TRADED",
+                    "SP_PROJECTED",
+                ]
+            },
+        )
 
     def test_check_market_no_subscribed(self):
         mock_market = mock.Mock()
@@ -130,16 +155,20 @@ class BaseStrategyTest(unittest.TestCase):
     def test_finish(self):
         self.strategy.finish()
 
-    @mock.patch(
-        "flumine.strategy.strategy.BaseStrategy.validate_order", return_value=True
-    )
-    def test_place_order(self, mock_validate_order):
+    def test_remove_market(self):
+        self.strategy._invested = {
+            ("1.23", 456, 7): 1,
+            ("1.23", 891, 7): 2,
+            ("1.24", 112, 7): 3,
+        }
+        self.strategy.remove_market("1.23")
+        self.assertEqual(self.strategy._invested, {("1.24", 112, 7): 3})
+
+    def test_place_order(self):
         mock_order = mock.Mock()
-        mock_order.lookup = ("1", 2, 3)
         mock_market = mock.Mock()
-        self.strategy.place_order(mock_market, mock_order)
-        mock_market.place_order.assert_called_with(mock_order)
-        self.assertIn(mock_order.lookup, self.strategy._invested)
+        self.assertTrue(self.strategy.place_order(mock_market, mock_order, 123))
+        mock_market.place_order.assert_called_with(mock_order, 123)
 
     def test_cancel_order(self):
         mock_order = mock.Mock()
@@ -156,15 +185,53 @@ class BaseStrategyTest(unittest.TestCase):
     def test_replace_order(self):
         mock_order = mock.Mock()
         mock_market = mock.Mock()
-        self.strategy.replace_order(mock_market, mock_order, 1.01)
-        mock_market.replace_order.assert_called_with(mock_order, 1.01)
+        self.strategy.replace_order(mock_market, mock_order, 1.01, 123)
+        mock_market.replace_order.assert_called_with(mock_order, 1.01, 123)
 
     def test_validate_order(self):
         mock_order = mock.Mock()
-        runner_context = mock.Mock(executable_orders=False)
+        runner_context = mock.Mock(
+            trade_count=0,
+            live_trade_count=0,
+            placed_elapsed_seconds=None,
+            reset_elapsed_seconds=None,
+        )
+        self.strategy.log_validation = True
         self.assertTrue(self.strategy.validate_order(runner_context, mock_order))
-        runner_context.executable_orders = True
+        # trade count
+        runner_context.trade_count = 3
         self.assertFalse(self.strategy.validate_order(runner_context, mock_order))
+        # live trade count
+        runner_context.trade_count = 1
+        runner_context.live_trade_count = 4
+        self.assertFalse(self.strategy.validate_order(runner_context, mock_order))
+        # place elapsed
+        runner_context.trade_count = 1
+        runner_context.live_trade_count = 1
+        runner_context.placed_elapsed_seconds = 0.49
+        mock_order.trade.place_reset_seconds = 0.5
+        self.assertFalse(self.strategy.validate_order(runner_context, mock_order))
+        # reset elapsed
+        runner_context.trade_count = 1
+        runner_context.live_trade_count = 1
+        runner_context.placed_elapsed_seconds = None
+        runner_context.reset_elapsed_seconds = 0.49
+        mock_order.trade.reset_seconds = 0.5
+        self.assertFalse(self.strategy.validate_order(runner_context, mock_order))
+
+    def test_validate_order_multi(self):
+        mock_order = mock.Mock()
+        mock_order.trade.id = "test"
+        runner_context = mock.Mock(
+            trade_count=10,
+            live_trade_count=10,
+            live_trades=["test"],
+            placed_elapsed_seconds=None,
+            reset_elapsed_seconds=None,
+        )
+        self.assertFalse(self.strategy.validate_order(runner_context, mock_order))
+        self.strategy.multi_order_trades = True
+        self.assertTrue(self.strategy.validate_order(runner_context, mock_order))
 
     def test_executable_orders(self):
         mock_context = mock.Mock(executable_orders=True)
@@ -185,6 +252,8 @@ class BaseStrategyTest(unittest.TestCase):
         mock_stream.stream_id = 321
         self.strategy.streams = [mock_stream]
         self.assertEqual(self.strategy.stream_ids, [321])
+        self.strategy.historic_stream_ids = [123]
+        self.assertEqual(self.strategy.stream_ids, [123])
 
     def test_info(self):
         self.assertEqual(
@@ -198,14 +267,16 @@ class BaseStrategyTest(unittest.TestCase):
                 "stream_ids": [],
                 "streaming_timeout": self.streaming_timeout,
                 "context": {"trigger": 0.123},
+                "max_live_trade_count": 4,
+                "max_order_exposure": 2,
+                "max_selection_exposure": 1,
+                "max_trade_count": 3,
+                "client": str(self.strategy.client),
             },
         )
 
     def test_name(self):
         self.assertEqual(self.strategy.name, "test")
-
-    def test_name_hash(self):
-        self.assertEqual(self.strategy.name_hash, "a94a8fe5ccb19")
 
     def test_str(self):
         self.assertEqual(str(self.strategy), "test")

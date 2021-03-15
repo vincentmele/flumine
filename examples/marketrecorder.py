@@ -44,6 +44,7 @@ strategy = MarketRecorder(
     context={"local_dir": settings.LOCAL_DIR,
              "force_update": settings.as_bool('FORCE_UPDATE'),
              "remove_file": settings.as_bool('REMOVE_FILE')},
+
 )
 
 framework.add_strategy(strategy)

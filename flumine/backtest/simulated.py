@@ -29,22 +29,31 @@ class Simulated:
         self.size_cancelled = 0.0
         self.size_lapsed = 0.0
         self.size_voided = 0.0
+        self.market_version = None  # version at place so we can lapse if needed
         self._piq = 0.0
         self._bsp_reconciled = False
-        # todo handle limit lapsing
 
-    def __call__(self, market_book: MarketBook, runner_analytics):
+    def __call__(self, market_book: MarketBook, runner_analytics) -> None:
         # simulates order matching
-        runner = self._get_runner(market_book)
         if (
             self._bsp_reconciled is False
             and market_book.bsp_reconciled
             and self.take_sp
         ):
+            runner = self._get_runner(market_book)
             self._process_sp(market_book.publish_time_epoch, runner)
 
-        if self.order.order_type.ORDER_TYPE == OrderTypes.LIMIT and self.size_remaining:
-            # todo piq cancellations
+        elif (
+            self.order.order_type.ORDER_TYPE == OrderTypes.LIMIT and self.size_remaining
+        ):
+            if market_book.version != self.market_version:
+                self.market_version = market_book.version  # update for next time
+                if market_book.status == "SUSPENDED":  # Material change
+                    if self.order.order_type.persistence_type == "LAPSE":
+                        self.size_lapsed += self.size_remaining
+                        return
+
+            # todo estimated piq cancellations
             self._process_traded(
                 market_book.publish_time_epoch, runner_analytics.traded
             )
@@ -54,8 +63,19 @@ class Simulated:
     ) -> SimulatedPlaceResponse:
         # simulates placeOrder request->matching->response
         # todo instruction/fillkill/timeInForce etc
+        # todo check marketVersion or reject entire package?
+
+        self.market_version = market_book.version
         if self.order.order_type.ORDER_TYPE == OrderTypes.LIMIT:
             runner = self._get_runner(market_book)
+
+            if runner.status == "REMOVED":
+                return self._create_place_response(
+                    bet_id,
+                    status="FAILURE",
+                    error_code="RUNNER_REMOVED",
+                )
+
             available_to_back = get_price(runner.ex.available_to_back, 0) or 1.01
             available_to_lay = get_price(runner.ex.available_to_lay, 0) or 1000
             price = self.order.order_type.price
@@ -107,11 +127,20 @@ class Simulated:
             return self._create_place_response(bet_id)
 
     def _create_place_response(
-        self, bet_id: int, status: str = "SUCCESS", error_code: str = None
+        self,
+        bet_id: int,
+        status: str = "SUCCESS",
+        order_status: str = None,
+        error_code: str = None,
     ) -> SimulatedPlaceResponse:
+        if order_status is None:
+            if self.size_remaining == 0:
+                order_status = "EXECUTION_COMPLETE"
+            else:
+                order_status = "EXECUTABLE"
         return SimulatedPlaceResponse(
             status=status,
-            order_status="EXECUTABLE",  # todo?
+            order_status=order_status,
             bet_id=str(bet_id),
             average_price_matched=self.average_price_matched,
             size_matched=self.size_matched,
@@ -122,15 +151,22 @@ class Simulated:
     def cancel(self) -> SimulatedCancelResponse:
         # simulates cancelOrder request->cancel->response
         if self.order.order_type.ORDER_TYPE == OrderTypes.LIMIT:
-            self.size_cancelled = self.size_remaining
+            _size_reduction = (
+                self.order.update_data.get("size_reduction") or self.size_remaining
+            )
+            _size_cancelled = min(
+                _size_reduction, self.size_remaining
+            )  # cancelled cannot be more than remaining (does not error)
+            self.size_cancelled += _size_cancelled
             return SimulatedCancelResponse(
                 status="SUCCESS",  # todo handle errors
-                size_cancelled=self.size_cancelled,
+                size_cancelled=_size_cancelled,
                 cancelled_date=datetime.datetime.utcnow(),
             )
         else:
             return SimulatedCancelResponse(
-                status="FAILURE", error_code="BET_ACTION_ERROR",  # todo ?
+                status="FAILURE",
+                error_code="BET_ACTION_ERROR",  # todo ?
             )
 
     def update(self, instruction: dict):
@@ -145,7 +181,8 @@ class Simulated:
             return SimulatedUpdateResponse(status="SUCCESS")
         else:
             return SimulatedCancelResponse(
-                status="FAILURE", error_code="BET_ACTION_ERROR",
+                status="FAILURE",
+                error_code="BET_ACTION_ERROR",
             )
 
     def _get_runner(self, market_book: MarketBook) -> RunnerBook:
@@ -184,7 +221,19 @@ class Simulated:
             self._bsp_reconciled = True
             _order_type = self.order.order_type
             if _order_type.ORDER_TYPE == OrderTypes.LIMIT:
-                size = self.size_remaining
+                if self.side == "BACK":
+                    size = self.size_remaining
+                else:
+                    remaining_risk = (_order_type.price - 1.0) * self.size_remaining
+                    client = self.order.trade.client
+                    if remaining_risk >= client.min_bsp_liability:
+                        size = round(remaining_risk / (actual_sp - 1.0), 2)
+                        # Cancel remaining size
+                        self.size_cancelled += round(self.size_remaining - size, 2)
+                    else:  # lapse
+                        self.size_lapsed += self.size_remaining
+                        self.order.lapsed()
+                        return
             elif _order_type.ORDER_TYPE == OrderTypes.LIMIT_ON_CLOSE:
                 if self.side == "BACK":
                     if actual_sp < _order_type.price:
@@ -195,7 +244,9 @@ class Simulated:
                     if actual_sp > _order_type.price:
                         self.order.execution_complete()
                         return
-                    size = round(_order_type.liability / (actual_sp - 1), 2)
+                    size = round(
+                        _order_type.liability / (actual_sp - 1), 2
+                    )  # todo round 2dp down
             elif _order_type.ORDER_TYPE == OrderTypes.MARKET_ON_CLOSE:
                 if self.side == "BACK":
                     size = _order_type.liability
@@ -292,6 +343,27 @@ class Simulated:
                 return self.size_matched
         else:
             return 0.0
+
+    @property
+    def status(self) -> str:
+        if self.order.status.value in [
+            "EXECUTION_COMPLETE",
+            "EXPIRED",
+            "VOIDED",
+            "LAPSED",
+            "VIOLATION",
+        ]:
+            return "EXECUTION_COMPLETE"
+        else:
+            return "EXECUTABLE"
+
+    @property
+    def info(self) -> dict:
+        return {
+            "profit": self.profit,
+            "piq": self._piq,
+            "matched": self.matched,
+        }
 
     def __bool__(self):
         return config.simulated or self.order.trade.client.paper_trade
