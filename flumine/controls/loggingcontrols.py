@@ -2,7 +2,6 @@ import logging
 import queue
 from threading import Thread
 
-from .. import config
 from ..events import events
 from ..events.events import EventType
 
@@ -15,8 +14,6 @@ class LoggingControl(Thread):
     trades, orders, new markets and market closure. Can be
     used to send data to a database or API for further analysis.
     """
-
-    # todo handle/store errors for retry
 
     NAME = "LOGGING_CONTROL"
 
@@ -42,11 +39,11 @@ class LoggingControl(Thread):
                         extra={"event": event},
                     )
 
-    def process_config(self, config: config):
-        logger.debug("process_config: %s" % config)
-
     def process_event(self, event: events.BaseEvent):
-        if event.EVENT_TYPE == EventType.STRATEGY:
+        if event.EVENT_TYPE == EventType.CONFIG:
+            self._process_config(event)
+
+        elif event.EVENT_TYPE == EventType.STRATEGY:
             self._process_strategy(event)
 
         elif event.EVENT_TYPE == EventType.MARKET:
@@ -76,9 +73,6 @@ class LoggingControl(Thread):
         elif event.EVENT_TYPE == EventType.CUSTOM_EVENT:
             self._process_custom_event(event)
 
-        elif event.EVENT_TYPE == EventType.NEW_DAY:
-            self._process_new_day(event)
-
         elif event.EVENT_TYPE == EventType.TERMINATOR:
             self._process_end_flumine(event)
             self.logging_queue.put(None)
@@ -86,38 +80,74 @@ class LoggingControl(Thread):
         else:
             logger.error("Unwanted item in logging control: {0}".format(event))
 
+    def _process_config(self, event):
+        """
+        :param event.event: config.py file
+        """
+        logger.debug("process_config: %s" % event)
+
     def _process_strategy(self, event):
+        """
+        :param event.event: Strategy class
+        """
         logger.debug("process_strategy: %s" % event)
 
     def _process_market(self, event):
+        """
+        :param event.event: Market class
+        """
         logger.debug("process_market: %s" % event)
 
     def _process_trade(self, event):
+        """
+        :param event.event: Trade class
+        """
         logger.debug("process_trade: %s" % event)
 
     def _process_order(self, event):
+        """
+        :param event.event: Order class
+        """
         logger.debug("process_order: %s" % event)
 
     def _process_balance(self, event):
+        """
+        :param event.event: Client class
+        """
         logger.debug("process_balance: %s" % event)
 
     def _process_cleared_orders(self, event):
+        """
+        :param event.event: betfairlightweight resources.ClearedOrders
+        """
         logger.debug("process_cleared_orders: %s" % event)
 
     def _process_cleared_orders_meta(self, event):
+        """
+        :param event.event: list of orders
+        """
         logger.debug("process_cleared_orders_meta: %s" % event)
 
     def _process_cleared_markets(self, event):
+        """
+        :param event.event: betfairlightweight resources.ClearedOrders
+        """
         logger.debug("process_cleared_markets: %s" % event)
 
     def _process_closed_market(self, event):
+        """
+        :param event.event: Market class
+        """
         logger.debug("process_closed_market: %s" % event)
 
     def _process_custom_event(self, event):
+        """
+        :param event.event: Custom event
+        """
         logger.debug("process_custom_event: %s" % event)
 
-    def _process_new_day(self, event):
-        logger.debug("process_new_day: %s" % event)
-
     def _process_end_flumine(self, event):
+        """
+        :param event.event: Termination Event
+        """
         logger.debug("_process_end_flumine: %s" % event)

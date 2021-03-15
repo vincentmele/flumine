@@ -11,9 +11,6 @@ class TradeTest(unittest.TestCase):
         logging.disable(logging.CRITICAL)
         mock_client = mock.Mock(paper_trade=False)
         self.mock_strategy = mock.Mock(client=mock_client)
-        self.mock_fill_kill = mock.Mock()
-        self.mock_offset = mock.Mock()
-        self.mock_green = mock.Mock()
         self.notes = collections.OrderedDict({"trigger": 123})
         self.trade = Trade(
             "1.234",
@@ -21,9 +18,8 @@ class TradeTest(unittest.TestCase):
             1.0,
             self.mock_strategy,
             self.notes,
-            self.mock_fill_kill,
-            self.mock_offset,
-            self.mock_green,
+            12,
+            34,
         )
 
     def test_init(self):
@@ -32,15 +28,14 @@ class TradeTest(unittest.TestCase):
         self.assertEqual(self.trade.handicap, 1.0)
         self.assertEqual(self.trade.strategy, self.mock_strategy)
         self.assertEqual(self.trade.notes, self.notes)
-        self.assertEqual(self.trade.fill_kill, self.mock_fill_kill)
-        self.assertEqual(self.trade.offset, self.mock_offset)
-        self.assertEqual(self.trade.green, self.mock_green)
         self.assertEqual(self.trade.status_log, [])
         self.assertEqual(self.trade.orders, [])
         self.assertEqual(self.trade.offset_orders, [])
         self.assertIsNotNone(self.trade.date_time_created)
         self.assertIsNone(self.trade.date_time_complete)
         self.assertIsNone(self.trade.market_notes)
+        self.assertEqual(self.trade.place_reset_seconds, 12)
+        self.assertEqual(self.trade.reset_seconds, 34)
 
     @mock.patch("flumine.order.trade.get_market_notes")
     def test_update_market_notes(self, mock_get_market_notes):
@@ -48,10 +43,17 @@ class TradeTest(unittest.TestCase):
         self.trade.update_market_notes(mock_market)
         self.assertEqual(self.trade.market_notes, mock_get_market_notes())
 
-    def test__update_status(self):
+    @mock.patch("flumine.order.trade.Trade.complete_trade")
+    @mock.patch(
+        "flumine.order.trade.Trade.complete",
+        new_callable=mock.PropertyMock,
+        return_value=True,
+    )
+    def test__update_status(self, mock_complete, mock_complete_trade):
         self.trade._update_status(TradeStatus.COMPLETE)
         self.assertEqual(self.trade.status_log, [TradeStatus.COMPLETE])
         self.assertEqual(self.trade.status, TradeStatus.COMPLETE)
+        mock_complete_trade.assert_called()
 
     @mock.patch("flumine.order.trade.Trade._update_status")
     def test_complete_trade(self, mock__update_status):
@@ -60,7 +62,7 @@ class TradeTest(unittest.TestCase):
         runner_context = self.mock_strategy.get_runner_context(
             self.trade.market_id, self.trade.selection_id, self.trade.handicap
         )
-        runner_context.reset.assert_called_with()
+        runner_context.reset.assert_called_with(self.trade.id)
         self.assertIsNotNone(self.trade.date_time_complete)
 
     def test_complete(self):
@@ -70,8 +72,10 @@ class TradeTest(unittest.TestCase):
         self.assertFalse(self.trade.complete)
 
     def test_trade_complete_offset(self):
-        self.trade.offset_orders = [1]
+        self.trade.offset_orders = [mock.Mock(complete=False)]
         self.assertFalse(self.trade.complete)
+        self.trade.offset_orders = [mock.Mock(complete=True)]
+        self.assertTrue(self.trade.complete)
 
     def test_trade_complete_replace_order(self):
         self.assertTrue(self.trade.complete)
@@ -85,7 +89,16 @@ class TradeTest(unittest.TestCase):
         mock_order_type.EXCHANGE = "SYM"
         mock_order = mock.Mock()
         mock_order.EXCHANGE = "SYM"
-        self.trade.create_order("BACK", mock_order_type, handicap=1, order=mock_order)
+        self.trade.create_order(
+            "BACK", mock_order_type, handicap=1, order=mock_order, context={1: 2}
+        )
+        mock_order.assert_called_with(
+            trade=self.trade,
+            side="BACK",
+            order_type=mock_order_type,
+            handicap=1,
+            context={1: 2},
+        )
         self.assertEqual(self.trade.orders, [mock_order()])
 
     def test_create_order_error(self):
@@ -100,7 +113,7 @@ class TradeTest(unittest.TestCase):
 
     def test_create_order_replacement(self):
         mock_order = mock.Mock()
-        replacement_order = self.trade.create_order_replacement(mock_order, 12)
+        replacement_order = self.trade.create_order_replacement(mock_order, 12, 2.00)
         self.assertEqual(self.trade.orders, [replacement_order])
 
     def test_create_order_from_current_limit(self):
@@ -114,12 +127,22 @@ class TradeTest(unittest.TestCase):
     def test_create_order_from_current_limit_on_close(self):
         mock_current_order = mock.Mock()
         mock_current_order.order_type = "LIMIT_ON_CLOSE"
-        with self.assertRaises(NotImplementedError):
-            self.trade.create_order_from_current(mock_current_order, "12345")
+        order = self.trade.create_order_from_current(mock_current_order, "12345")
+        self.assertEqual(order.bet_id, mock_current_order.bet_id)
+        self.assertEqual(order.id, "12345")
+        self.assertEqual(self.trade.orders, [order])
 
     def test_create_order_from_current_market_on_close(self):
         mock_current_order = mock.Mock()
         mock_current_order.order_type = "MARKET_ON_CLOSE"
+        order = self.trade.create_order_from_current(mock_current_order, "12345")
+        self.assertEqual(order.bet_id, mock_current_order.bet_id)
+        self.assertEqual(order.id, "12345")
+        self.assertEqual(self.trade.orders, [order])
+
+    def test_create_order_from_current_unknown(self):
+        mock_current_order = mock.Mock()
+        mock_current_order.order_type = "BE"
         with self.assertRaises(NotImplementedError):
             self.trade.create_order_from_current(mock_current_order, "12345")
 
@@ -133,15 +156,20 @@ class TradeTest(unittest.TestCase):
         self.assertEqual(self.trade.notes_str, "")
 
     def test_info(self):
+        self.trade.status_log = [TradeStatus.PENDING, TradeStatus.COMPLETE]
         self.assertEqual(
             self.trade.info,
             {
-                "id": self.trade.id,
+                "id": str(self.trade.id),
                 "orders": [],
-                "status": TradeStatus.LIVE,
-                "strategy": self.mock_strategy,
+                "offset_orders": [],
+                "place_reset_seconds": 12,
+                "reset_seconds": 34,
+                "strategy": str(self.mock_strategy),
                 "notes": "123",
                 "market_notes": None,
+                "status": "Live",
+                "status_log": "Pending, Complete",
             },
         )
 

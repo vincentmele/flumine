@@ -13,25 +13,35 @@ class BackgroundWorkerTest(unittest.TestCase):
         self.worker = worker.BackgroundWorker(
             self.mock_flumine,
             self.mock_function,
-            123,
+            0,
             (1, 2),
             {"hello": "world"},
-            5,
+            0,
             {1: 2},
         )
 
     def test_init(self):
-        self.assertEqual(self.worker.interval, 123)
+        self.assertEqual(self.worker.interval, 0)
         self.assertEqual(self.worker.function, self.mock_function)
         self.assertEqual(self.worker.flumine, self.mock_flumine)
         self.assertEqual(self.worker.func_args, (1, 2))
         self.assertEqual(self.worker.func_kwargs, {"hello": "world"})
-        self.assertEqual(self.worker.start_delay, 5)
+        self.assertEqual(self.worker.start_delay, 0)
         self.assertEqual(self.worker.context, {1: 2})
         self.assertEqual(self.worker.name, "test")
+        self.assertFalse(self.worker._running)
 
     # def test_run(self):
     #     self.worker.run()
+
+    def test_shutdown(self):
+        self.worker.start()
+        while not self.worker._running:
+            continue  # wait for thread to start
+        self.assertTrue(self.worker.is_alive())
+        self.worker.shutdown()
+        self.assertFalse(self.worker._running)
+        self.assertFalse(self.worker.is_alive())
 
 
 class WorkersTest(unittest.TestCase):
@@ -81,11 +91,16 @@ class WorkersTest(unittest.TestCase):
     def test_poll_market_catalogue(self, mock_events):
         mock_context = mock.Mock()
         mock_flumine = mock.Mock()
-        mock_flumine.markets.markets = {"1.234": None, "5.678": None}
+        mock_market_one = mock.Mock(market_id="1.234", update_market_catalogue=True)
+        mock_market_two = mock.Mock(market_id="5.678", update_market_catalogue=False)
+        mock_flumine.markets.markets = {
+            "1.234": mock_market_one,
+            "5.678": mock_market_two,
+        }
 
         worker.poll_market_catalogue(mock_context, mock_flumine)
         mock_flumine.client.betting_client.betting.list_market_catalogue.assert_called_with(
-            filter={"marketIds": list(mock_flumine.markets.markets.keys())},
+            filter={"marketIds": ["1.234"]},
             market_projection=[
                 "COMPETITION",
                 "EVENT",
@@ -112,14 +127,35 @@ class WorkersTest(unittest.TestCase):
             mock_events.BalanceEvent(mock_flumine.client.account_funds)
         )
 
-    # @mock.patch("flumine.worker._get_cleared_market")
-    # @mock.patch("flumine.worker._get_cleared_orders")
-    # def test_poll_cleared_orders(self, mock__get_cleared_orders, mock__get_cleared_market):
-    #     mock_flumine = mock.Mock()
-    #     mock_client = mock.Mock()
-    #
-    #     worker.poll_cleared_orders(mock_flumine, mock_client)
-    #
+    @mock.patch("flumine.worker._get_cleared_market")
+    @mock.patch("flumine.worker._get_cleared_orders")
+    def test_poll_market_closure(
+        self, mock__get_cleared_orders, mock__get_cleared_market
+    ):
+        mock_client = mock.Mock(paper_trade=False)
+        mock_flumine = mock.Mock(client=mock_client)
+        market_one = mock.Mock(closed=False)
+        market_two = mock.Mock(closed=True, orders_cleared=True, market_cleared=True)
+        market_three = mock.Mock(
+            closed=True, orders_cleared=False, market_cleared=False
+        )
+        mock_flumine.markets.markets = {
+            1: market_one,
+            2: market_two,
+            3: market_three,
+        }
+        worker.poll_market_closure({}, mock_flumine)
+        mock__get_cleared_orders.assert_called_with(
+            mock_flumine, mock_client.betting_client, market_three.market_id
+        )
+        mock__get_cleared_market.assert_called_with(
+            mock_flumine, mock_client.betting_client, market_three.market_id
+        )
+
+    def test_poll_market_closure_paper(self):
+        mock_client = mock.Mock(paper_trade=True)
+        mock_flumine = mock.Mock(client=mock_client)
+        worker.poll_market_closure({}, mock_flumine)
 
     @mock.patch("flumine.worker.config")
     @mock.patch("flumine.worker.events")

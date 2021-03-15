@@ -3,6 +3,502 @@
 Release History
 ---------------
 
+1.17.12 (2021-03-15)
++++++++++++++++++++
+
+**Improvements**
+
+- Logging control cleanup / docs
+
+**Bug Fixes**
+
+- missing if in process.py to check order status
+
+1.17.11 (2021-03-12)
++++++++++++++++++++
+
+**Improvements**
+
+- order context added
+
+**Bug Fixes**
+
+- Prevent duplicate order logging control calls
+
+1.17.10 (2021-03-12)
++++++++++++++++++++
+
+**Improvements**
+
+- async placeOrder handling added, defaults to False via config.py
+- Execution logging improvements
+
+**Bug Fixes**
+
+- Handle race condition (seen daily) where cancel is not correctly update to execution complete
+
+1.17.9 (2021-03-09)
++++++++++++++++++++
+
+**Improvements**
+
+- Remove session close in execution when removing stale sessions (very slow)
+- Refactor closure worker to check all closed markets requiring clearing
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.12.1
+
+1.17.8 (2021-03-08)
++++++++++++++++++++
+
+**Improvements**
+
+- Allow kwargs to be passed to `trade.create_order`
+- Correct handling off completed offset orders
+
+**Bug Fixes**
+
+- Prevent closure functions being called on a recorder closure
+
+1.17.7 (2021-03-05)
++++++++++++++++++++
+
+**Improvements**
+
+- strategy.log_validation_failures marked for depreciation and logging pushed up to trading control
+- strategy.multi_order_trades var added to allow multiple orders to be placed under a single trade
+- RunnerContext trades made public
+- Docs cleanup and unused trade vars removed
+- config.max_workers renamed to max_execution_workers (*breaking change)
+
+**Bug Fixes**
+
+- Prevent double counting of trades if place called more than once
+
+1.17.6 (2021-03-05)
++++++++++++++++++++
+
+**Improvements**
+
+- trade id added to context to prevent race condition and better visibility on live trades
+
+**Bug Fixes**
+
+- incorrect handling of replace on runner context fix (adds to live trade count)
+
+1.17.5 (2021-03-01)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- #382 replace order failure fix (no execute)
+
+1.17.4 (2021-02-26)
++++++++++++++++++++
+
+**Improvements**
+
+- Transaction id and logging added
+- max_workers moved to config to allow int to be configurable
+
+1.17.3 (2021-02-25)
++++++++++++++++++++
+
+**Improvements**
+
+- Potential thread pool exhaustion logging added
+
+1.17.2 (2021-02-25)
++++++++++++++++++++
+
+**Improvements**
+
+- Allow patching of stream retry wait arg
+
+**Bug Fixes**
+
+- Incorrect handling of potential exposure in control
+
+1.17.1 (2021-02-24)
++++++++++++++++++++
+
+**Improvements**
+
+- Current and total transactions available from client
+- `blotter.strategy_selection_orders` func added (speed improvement on exposure calc)
+
+**Bug Fixes**
+
+- Refactor of client transaction control to correctly apply the 5000 limit
+
+1.17.0 (2021-02-22)
++++++++++++++++++++
+
+**Improvements**
+
+- Major refactor to order placement using Transaction class to allow user control over order placement
+- Trading controls executed on place rather than OrderPackage level (Breaking change to controls)
+- strategy order placement to be depreciated (Breaking change from version 1.18.0)
+- OrderPackage no longer processed through the queue (quicker tick to trade)
+- Error correctly raised on duplicate place calls
+- Execution worker count bumped
+
+1.16.3 (2021-02-08)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Minor fix when combining data and market stream strategies
+
+1.16.2 (2021-02-05)
++++++++++++++++++++
+
+**Improvements**
+
+- Blotter strategy orders added for faster lookup
+- Strategy name hash cached
+- Minor selection_exposure optimisations
+- Simulated optimisations
+
+1.16.1 (2021-01-28)
++++++++++++++++++++
+
+**Improvements**
+
+- Various optimisations on pending_packages and low level listener updates
+- Cache stream_id when backtesting
+- Always run integrations tests (now possible with faster backtesting from bflw 2.12.0)
+
+1.16.0 (2021-01-25)
++++++++++++++++++++
+
+**Improvements**
+
+- bflw changes / further listener optimisations
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.12.0
+
+1.15.4 (2021-01-18)
++++++++++++++++++++
+
+**Improvements**
+
+- Restrict catalogue requests to market version update
+
+**Bug Fixes**
+
+- #192 correctly lapse limit orders
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.11.2
+
+1.15.3 (2021-01-11)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Correctly handle runner removal / order void for LimitOnClose/MarketOnClose orders
+
+1.15.2 (2021-01-11)
++++++++++++++++++++
+
+**Improvements**
+
+- Order execution args added on place/cancel/update/replace
+- License update
+- Example update (@lunswor)
+
+**Bug Fixes**
+
+- #358 dynamic keep alive (based on trading client)
+
+**Libraries**
+
+- py3.5 removed from setup.py
+
+1.15.1 (2020-12-28)
++++++++++++++++++++
+
+**Improvements**
+
+- #356 Jupyter logging control added (POC) with info improvements
+- #344 lookup cache added and info optimisations
+- #327 correctly return orderStatus
+- Middleware optimisation by only processing updated runners
+- Minor test improvements
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.11.1
+
+1.15.0 (2020-12-07)
++++++++++++++++++++
+
+**Improvements**
+
+- Updates for bflw 2.11.0
+- logging improved on orphan orders
+
+**Bug Fixes**
+
+- #347 incorrect adjustment factor (sub 1.01)
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.11.0
+
+1.14.13 (2020-12-05)
++++++++++++++++++++
+
+**Improvements**
+
+- Backtest market catalogue middleware example (@lunswor)
+- #344 Initial work on improving calls when subscribed to 5k+ markets
+
+**Bug Fixes**
+
+- #342 market/limit on close order size remaining bug
+
+1.14.12 (2020-11-28)
++++++++++++++++++++
+
+**Improvements**
+
+- 'on_process' function optimised
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.10.2
+
+1.14.11 (2020-11-25)
++++++++++++++++++++
+
+**Improvements**
+
+- Flaky flaky integration tests
+
+**Bug Fixes**
+
+- Missing 'on_process' function (now subclassed)
+
+1.14.10 (2020-11-25)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Revert removal of `add_stream` (removed by accident)
+
+1.14.9 (2020-11-25)
++++++++++++++++++++
+
+**Improvements**
+
+- Historic stream cleanup for bflw 2.10.1
+- Adding logging of order validation
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.10.1
+
+1.14.8 (2020-11-16)
++++++++++++++++++++
+
+**Improvements**
+
+- Config event added and processed on start
+
+**Bug Fixes**
+
+- #320 prevent market on close limit order when below min bsp liability
+
+1.14.7 (2020-11-14)
++++++++++++++++++++
+
+**Improvements**
+
+- Minor bug on initial init with calculate_traded func
+
+1.14.6 (2020-11-13)
++++++++++++++++++++
+
+**Improvements**
+
+- Refactor on calculate_traded func (15% speed increase)
+
+**Bug Fixes**
+
+- Refactoring create_order_from_current, so that it is not dependent on the '-' separator (@jsphon)
+
+1.14.5 (2020-11-11)
++++++++++++++++++++
+
+**Improvements**
+
+- Docs cleanup
+
+**Bug Fixes**
+
+- #318 process customer order ref
+- Rounding on order properties
+
+1.14.4 (2020-11-05)
++++++++++++++++++++
+
+**Improvements**
+
+- #310 typing update and bool return added on stream
+- add min_bet_validation flag to prevent control checking min size
+
+**Bug Fixes**
+
+- filters out violated orders from being used to calculate the selection exposure (@lunswor)
+- handle simulated cancel when size reduction is larger than size remaining
+- pass correct size into create replace order based on api response
+- #314 Calculates size_remaining from size and size_matched when not set from placeResponse
+
+1.14.3 (2020-11-02)
++++++++++++++++++++
+
+**Improvements**
+
+- size reduction bug
+
+1.14.2 (2020-11-02)
++++++++++++++++++++
+
+**Improvements**
+
+- _process_cleared_orders called on market closure when backtesting / paper trading
+- size reduction handling added to simulated execution on cancel
+- Add py3.9 actions test
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.10.0 (exchange stream api release 10/11/20)
+
+1.14.1 (2020-10-29)
++++++++++++++++++++
+
+**Improvements**
+
+- #297 add violation msg to order on violation
+- Graceful worker shutdown
+- Terminate worker example added
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.9.2
+- python-json-logger upgraded to 2.0.1
+
+1.14.0 (2020-10-12)
++++++++++++++++++++
+
+**Improvements**
+
+- Prevent MarketBook latency logging when update is from a snap
+
+**Bug Fixes**
+
+- #291 Bug in calculated_unmatched_exposure func
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.9.0 (#248 memory leak)
+
+1.13.1 (2020-10-08)
++++++++++++++++++++
+
+**Improvements**
+
+- Updates the pricerecorder example method parameters (@lunswor)
+- #248 Remove runner_context from strategy on market remove
+- #287 order separator (jsphon)
+
+1.13.0 (2020-10-05)
++++++++++++++++++++
+
+**Improvements**
+
+- #270 strategy exposure improvements on trading control
+
+**Bug Fixes**
+
+- Handle unhandled exceptions in execution
+- Replace now fixed (regression on removal of `order_package.market`
+- Backtest process orders now called before strategy calls *impacts backtesting profit*
+
+**Libraries**
+
+- python-json-logger upgraded to 2.0.0
+
+1.12.3 (2020-09-28)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Missing book / bet_delay in live fix
+
+1.12.2 (2020-09-28)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- #248 completely remove circular reference to market->blotter
+- Correct market closure when recording data (raw)
+
+1.12.1 (2020-09-21)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- #275 Laying Limit Orders, Persistence Type MARKET_ON_CLOSE (@jsphon)
+- PR added to actions
+
+1.12.0 (2020-09-14)
++++++++++++++++++++
+
+**Improvements**
+
+- #269 latency warning added
+
+**Bug Fixes**
+
+- #248 addition of weakref to try and break circular reference (@synapticarbors) + deletion of each event
+
+**Libraries**
+
+- betfairlightweight upgraded to 2.8.0 (orjson)
+- black updated to 20.8b1
+
+1.11.2 (2020-08-28)
++++++++++++++++++++
+
+**Improvements**
+
+- Minor refactor and test improvements on FlumineBacktest
+- Tennis/inplayservice worker example added
+
+**Bug Fixes**
+
+- Validates runner is active on placeOrder when simulating (@lunswor)
+- Complete.trade moved to when order or trade status updates rather than process.py, previously it was missing any orders that violated when no other orders active
+
+1.11.1 (2020-08-24)
++++++++++++++++++++
+
+**Improvements**
+
+- #187 strategy and trade runner context additions
+
+**Bug Fixes**
+
+- Handling for SP orders on startup
+- Bug fix on client control max orders when backtesting
+
 1.11.0 (2020-08-03)
 +++++++++++++++++++
 

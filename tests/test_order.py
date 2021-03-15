@@ -1,3 +1,4 @@
+import string
 import unittest
 import datetime
 from unittest import mock
@@ -8,6 +9,7 @@ from flumine.order.order import (
     ExchangeType,
     OrderTypes,
     OrderStatus,
+    VALID_BETFAIR_CUSTOMER_ORDER_REF_CHARACTERS,
 )
 from flumine.exceptions import OrderUpdateError
 
@@ -15,9 +17,13 @@ from flumine.exceptions import OrderUpdateError
 class BaseOrderTest(unittest.TestCase):
     def setUp(self) -> None:
         mock_client = mock.Mock(paper_trade=False)
-        self.mock_trade = mock.Mock(client=mock_client)
-        self.mock_order_type = mock.Mock()
-        self.order = BaseOrder(self.mock_trade, "BACK", self.mock_order_type, 1)
+        self.mock_trade = mock.Mock(
+            client=mock_client, market_id="1.1", selection_id=123, info={}
+        )
+        self.mock_order_type = mock.Mock(info={})
+        self.order = BaseOrder(
+            self.mock_trade, "BACK", self.mock_order_type, 1, context={1: 2}
+        )
 
     def test_init(self):
         self.assertIsNotNone(self.order.id)
@@ -25,9 +31,15 @@ class BaseOrderTest(unittest.TestCase):
         self.assertEqual(self.order.side, "BACK")
         self.assertEqual(self.order.order_type, self.mock_order_type)
         self.assertEqual(self.order.handicap, 1)
+        self.assertEqual(
+            self.order.lookup,
+            (self.order.market_id, self.order.selection_id, self.order.handicap),
+        )
         self.assertIsNone(self.order.runner_status)
         self.assertIsNone(self.order.status)
         self.assertEqual(self.order.status_log, [])
+        self.assertIsNone(self.order.violation_msg)
+        self.assertEqual(self.order.context, {1: 2})
         self.assertIsNone(self.order.bet_id)
         self.assertIsNone(self.order.EXCHANGE)
         self.assertEqual(self.order.update_data, {})
@@ -39,9 +51,11 @@ class BaseOrderTest(unittest.TestCase):
 
     @mock.patch("flumine.order.order.BaseOrder.info")
     def test__update_status(self, mock_info):
+        self.mock_trade.complete = True
         self.order._update_status(OrderStatus.EXECUTION_COMPLETE)
         self.assertEqual(self.order.status_log, [OrderStatus.EXECUTION_COMPLETE])
         self.assertEqual(self.order.status, OrderStatus.EXECUTION_COMPLETE)
+        self.mock_trade.complete_trade.assert_called()
 
     @mock.patch("flumine.order.order.BaseOrder._update_status")
     def test_placing(self, mock__update_status):
@@ -95,9 +109,10 @@ class BaseOrderTest(unittest.TestCase):
     @mock.patch("flumine.order.order.BaseOrder._update_status")
     def test_violation(self, mock__update_status):
         self.order.update_data = {123: 456}
-        self.order.violation()
+        self.order.violation("the murder capital")
         mock__update_status.assert_called_with(OrderStatus.VIOLATION)
         self.assertEqual(self.order.update_data, {})
+        self.assertEqual(self.order.violation_msg, "the murder capital")
 
     def test_place(self):
         with self.assertRaises(NotImplementedError):
@@ -228,13 +243,30 @@ class BaseOrderTest(unittest.TestCase):
     def test_repr(self):
         self.assertEqual(repr(self.order), "Order None: None")
 
+    def test_set_and_get_sep(self):
+        self.order.sep = "a"
+        self.assertEqual("a", self.order.sep)
+
+    def test_customer_order_ref(self):
+        self.order.trade.strategy.name_hash = "my_name_hash"
+        self.order.id = 1234
+        self.assertEqual("my_name_hash-1234", self.order.customer_order_ref)
+
+        self.order.sep = "I"
+        self.assertEqual("my_name_hashI1234", self.order.customer_order_ref)
+
+        self.order.sep = "O"
+        self.assertEqual("my_name_hashO1234", self.order.customer_order_ref)
+
 
 class BetfairOrderTest(unittest.TestCase):
     def setUp(self) -> None:
         mock_client = mock.Mock(paper_trade=False)
-        self.mock_trade = mock.Mock(client=mock_client)
+        self.mock_trade = mock.Mock(
+            client=mock_client, market_id="1.1", selection_id=123, info={}
+        )
         self.mock_status = mock.Mock()
-        self.mock_order_type = mock.Mock()
+        self.mock_order_type = mock.Mock(info={}, size=2.0, liability=2.0)
         self.order = BetfairOrder(self.mock_trade, "BACK", self.mock_order_type)
 
     def test_init(self):
@@ -253,6 +285,7 @@ class BetfairOrderTest(unittest.TestCase):
     @mock.patch("flumine.order.order.BetfairOrder.cancelling")
     def test_cancel(self, mock_cancelling, mock_size_remaining):
         mock_size_remaining.return_value = 20
+        self.order.bet_id = 123
         self.order.status = OrderStatus.EXECUTABLE
         with self.assertRaises(OrderUpdateError):
             self.order.cancel(12)
@@ -263,6 +296,11 @@ class BetfairOrderTest(unittest.TestCase):
         mock_cancelling.assert_called_with()
         self.order.cancel()
         self.assertEqual(self.order.update_data, {"size_reduction": None})
+
+    def test_cancel_bet_id(self):
+        self.order.status = OrderStatus.EXECUTABLE
+        with self.assertRaises(OrderUpdateError):
+            self.order.cancel(12)
 
     @mock.patch(
         "flumine.order.order.BetfairOrder.size_remaining",
@@ -279,7 +317,12 @@ class BetfairOrderTest(unittest.TestCase):
         with self.assertRaises(OrderUpdateError):
             self.order.cancel(21)
 
-    def test_cancel_error(self):
+    @mock.patch(
+        "flumine.order.order.BetfairOrder.size_remaining",
+        new_callable=mock.PropertyMock,
+    )
+    def test_cancel_error(self, mock_size_remaining):
+        mock_size_remaining.return_value = 20
         self.mock_order_type.ORDER_TYPE = OrderTypes.LIMIT
         self.order.status = OrderStatus.PENDING
         with self.assertRaises(OrderUpdateError):
@@ -287,6 +330,7 @@ class BetfairOrderTest(unittest.TestCase):
 
     @mock.patch("flumine.order.order.BetfairOrder.updating")
     def test_update(self, mock_updating):
+        self.order.bet_id = 123
         self.order.status = OrderStatus.EXECUTABLE
         with self.assertRaises(OrderUpdateError):
             self.order.update("PERSIST")
@@ -300,6 +344,11 @@ class BetfairOrderTest(unittest.TestCase):
         with self.assertRaises(OrderUpdateError):
             self.order.update("PERSIST")
 
+    def test_update_bet_id(self):
+        self.order.status = OrderStatus.EXECUTABLE
+        with self.assertRaises(OrderUpdateError):
+            self.order.update("PERSIST")
+
     def test_update_error(self):
         self.mock_order_type.ORDER_TYPE = OrderTypes.LIMIT
         self.mock_order_type.persistence_type = "LAPSE"
@@ -309,6 +358,7 @@ class BetfairOrderTest(unittest.TestCase):
 
     @mock.patch("flumine.order.order.BetfairOrder.replacing")
     def test_replace(self, mock_replacing):
+        self.order.bet_id = 123
         self.order.status = OrderStatus.EXECUTABLE
         with self.assertRaises(OrderUpdateError):
             self.order.replace(1.01)
@@ -321,6 +371,11 @@ class BetfairOrderTest(unittest.TestCase):
 
         with self.assertRaises(OrderUpdateError):
             self.order.replace(2.02)
+
+    def test_replace_bet_id(self):
+        self.order.status = OrderStatus.EXECUTABLE
+        with self.assertRaises(OrderUpdateError):
+            self.order.replace(1.01)
 
     def test_replace_error(self):
         self.mock_order_type.ORDER_TYPE = OrderTypes.LIMIT
@@ -397,10 +452,34 @@ class BetfairOrderTest(unittest.TestCase):
         self.assertEqual(self.order.size_matched, mock_current_order.size_matched)
 
     def test_size_remaining(self):
+        self.mock_order_type.ORDER_TYPE = OrderTypes.LIMIT
+        self.mock_order_type.size = 0
         self.assertEqual(self.order.size_remaining, 0)
+        self.mock_order_type.size = 10
         mock_current_order = mock.Mock(size_remaining=10)
         self.order.responses.current_order = mock_current_order
         self.assertEqual(self.order.size_remaining, mock_current_order.size_remaining)
+
+    def test_size_remaining_missing(self):
+        self.mock_order_type.ORDER_TYPE = OrderTypes.LIMIT
+        self.mock_order_type.size = 2.51
+        self.assertEqual(self.order.size_remaining, 2.51)
+
+    @mock.patch(
+        "flumine.order.order.BetfairOrder.size_matched",
+        new_callable=mock.PropertyMock,
+    )
+    def test_size_remaining_missing_partial_match(self, mock_size_matched):
+        self.mock_order_type.ORDER_TYPE = OrderTypes.LIMIT
+        mock_size_matched.return_value = 2
+        self.mock_order_type.size = 10
+        self.assertEqual(self.order.size_remaining, 8)
+
+    def test_size_remaining_market_on_close(self):
+        self.mock_order_type.ORDER_TYPE = OrderTypes.MARKET_ON_CLOSE
+        self.mock_order_type.size = ValueError
+        self.order.responses.current_order = None
+        self.assertEqual(self.order.size_remaining, self.mock_order_type.liability)
 
     def test_size_cancelled(self):
         self.assertEqual(self.order.size_cancelled, 0)
@@ -428,8 +507,10 @@ class BetfairOrderTest(unittest.TestCase):
                 "bet_id": None,
                 "handicap": self.order.handicap,
                 "id": self.order.id,
+                "date_time_created": str(self.order.date_time_created),
                 "market_id": self.mock_trade.market_id,
                 "selection_id": self.mock_trade.selection_id,
+                "publish_time": None,
                 "status": None,
                 "status_log": "Pending, Execution complete",
                 "trade": self.mock_trade.info,
@@ -444,5 +525,47 @@ class BetfairOrderTest(unittest.TestCase):
                     "average_price_matched": self.order.average_price_matched,
                 },
                 "customer_order_ref": self.order.customer_order_ref,
+                "simulated": {
+                    "profit": 0.0,
+                    "piq": 0.0,
+                    "matched": [],
+                },
+                "violation_msg": self.order.violation_msg,
+                "responses": {
+                    "date_time_placed": None,
+                    "elapsed_seconds_executable": None,
+                },
+                "runner_status": self.order.runner_status,
             },
         )
+
+    def test_json(self):
+        self.assertTrue(isinstance(self.order.json(), str))
+
+    def test_set_invalid_sep(self):
+        with self.assertRaises(ValueError):
+            self.order.sep = "@"
+
+
+class IsValidCustomerOrderRefTestCase(unittest.TestCase):
+    def test_letters_True(self):
+        # ascii_letters contains a-z and A-Z
+        for c in string.ascii_letters:
+            self.assertTrue(BetfairOrder.is_valid_customer_order_ref_character(c))
+
+    def test_2letters_False(self):
+        self.assertFalse(BetfairOrder.is_valid_customer_order_ref_character("aB"))
+        self.assertFalse(BetfairOrder.is_valid_customer_order_ref_character("CD"))
+
+    def test_digits_True(self):
+        # string.digits contains digits 0-9
+        for c in string.digits:
+            self.assertTrue(BetfairOrder.is_valid_customer_order_ref_character(c))
+
+    def test_special_characters_True(self):
+        for c in VALID_BETFAIR_CUSTOMER_ORDER_REF_CHARACTERS:
+            self.assertTrue(BetfairOrder.is_valid_customer_order_ref_character((c)))
+
+    def test_special_characters_False(self):
+        for c in list('!"£$%'):
+            self.assertFalse(BetfairOrder.is_valid_customer_order_ref_character((c)))

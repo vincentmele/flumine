@@ -14,7 +14,6 @@ from flumine.order.orderpackage import (
 
 class OrderPackageTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.mock_market = mock.Mock()
         self.mock_package_type = mock.Mock()
         self.mock_client = mock.Mock()
         self.mock_order = mock.Mock()
@@ -24,7 +23,8 @@ class OrderPackageTest(unittest.TestCase):
             "1.234",
             [self.mock_order],
             self.mock_package_type,
-            self.mock_market,
+            1,
+            market_version=123,
         )
 
     def test_init(self):
@@ -34,13 +34,15 @@ class OrderPackageTest(unittest.TestCase):
         self.assertEqual(self.order_package.package_type, self.mock_package_type)
         self.assertEqual(self.order_package.EVENT_TYPE, EventType.ORDER_PACKAGE)
         self.assertEqual(self.order_package.QUEUE_TYPE, QueueType.HANDLER)
-        self.assertEqual(self.order_package.market, self.mock_market)
+        self.assertEqual(self.order_package.bet_delay, 1)
         self.assertIsNone(self.order_package.EXCHANGE)
         self.assertFalse(self.order_package.async_)
+        self.assertEqual(self.order_package._market_version, 123)
         self.assertFalse(self.order_package.processed)
         self.assertTrue(self.order_package._retry)
         self.assertEqual(self.order_package._max_retries, 3)
         self.assertEqual(self.order_package._retry_count, 0)
+        self.assertIsNone(self.order_package.simulated_delay)
 
     def test_retry(self):
         self.assertTrue(self.order_package.retry())
@@ -57,6 +59,22 @@ class OrderPackageTest(unittest.TestCase):
         self.assertFalse(self.order_package.retry())
         self.assertEqual(self.order_package._retry_count, 3)
         mock_time.sleep.assert_called()
+
+    def test_calc_simulated_delay(self):
+        self.assertIsNone(self.order_package.calc_simulated_delay())
+        self.order_package.client.execution.EXCHANGE = ExchangeType.SIMULATED
+        self.order_package.client.execution.PLACE_LATENCY = 0.1
+        self.order_package.client.execution.CANCEL_LATENCY = 0.2
+        self.order_package.client.execution.UPDATE_LATENCY = 0.3
+        self.order_package.client.execution.REPLACE_LATENCY = 0.4
+        self.order_package.package_type = OrderPackageType.PLACE
+        self.assertEqual(self.order_package.calc_simulated_delay(), 1.1)
+        self.order_package.package_type = OrderPackageType.CANCEL
+        self.assertEqual(self.order_package.calc_simulated_delay(), 0.2)
+        self.order_package.package_type = OrderPackageType.UPDATE
+        self.assertEqual(self.order_package.calc_simulated_delay(), 0.3)
+        self.order_package.package_type = OrderPackageType.REPLACE
+        self.assertEqual(self.order_package.calc_simulated_delay(), 1.4)
 
     def test_place_instructions(self):
         with self.assertRaises(NotImplementedError):
@@ -87,6 +105,10 @@ class OrderPackageTest(unittest.TestCase):
         ]
         self.assertEqual(len(self.order_package.orders), 2)
 
+    def test_retry_count(self):
+        self.order_package._retry_count = 1
+        self.assertEqual(self.order_package.retry_count, 1)
+
     def test_info(self):
         self.assertEqual(
             self.order_package.info,
@@ -95,21 +117,20 @@ class OrderPackageTest(unittest.TestCase):
                 "client": self.order_package.client,
                 "market_id": self.order_package.market_id,
                 "orders": [self.mock_order.id],
+                "order_count": 1,
                 "package_type": self.order_package.package_type.value,
                 "customer_strategy_ref": self.order_package.customer_strategy_ref,
                 "bet_delay": self.order_package.bet_delay,
-                "market_version": self.order_package.market_version,
+                "market_version": self.order_package._market_version,
                 "retry": self.order_package._retry,
                 "retry_count": self.order_package._retry_count,
             },
         )
 
     def test_market_version(self):
-        self.assertIsNone(self.order_package.market_version)
-
-    def test_bet_delay(self):
         self.assertEqual(
-            self.order_package.bet_delay, self.mock_market.market_book.bet_delay,
+            self.order_package.market_version,
+            {"version": self.order_package._market_version},
         )
 
     def test_iter(self):
@@ -121,7 +142,6 @@ class OrderPackageTest(unittest.TestCase):
 
 class BetfairOrderPackageTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.mock_market = mock.Mock()
         self.mock_package_type = mock.Mock()
         self.mock_client = mock.Mock()
         self.mock_order = mock.Mock()
@@ -131,7 +151,7 @@ class BetfairOrderPackageTest(unittest.TestCase):
             "1.234",
             [self.mock_order],
             self.mock_package_type,
-            self.mock_market,
+            0,
         )
 
     def test_init(self):

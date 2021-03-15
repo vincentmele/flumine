@@ -18,7 +18,7 @@ framework = Flumine(client=client)
 ```
 
 !!! note
-    flumine will handle login, logout and keep alive whilst the framework is running.
+    flumine will handle login, logout and keep alive whilst the framework is running using the `keep_alive` worker.
 
 A strategy can now be created by using the BaseStrategy class:
 
@@ -65,6 +65,48 @@ The framework can now be started:
 
 ```python
 framework.run()
+```
+
+### Order placement
+
+Orders can be placed as followed:
+
+```python
+from flumine.order.trade import Trade
+from flumine.order.order import LimitOrder
+
+
+class ExampleStrategy(BaseStrategy):
+    def process_market_book(self, market, market_book):
+        for runner in market_book.runners:
+            if runner.selection_id == 123:
+                trade = Trade(
+                    market_id=market_book.market_id, 
+                    selection_id=runner.selection_id,
+                    handicap=runner.handicap,
+                    strategy=self
+                )
+                order = trade.create_order(
+                    side="LAY", 
+                    order_type=LimitOrder(price=1.01, size=2.00)
+                )
+                market.place_order(order)
+```
+
+This order will be validated through controls, stored in the blotter and sent straight to the execution thread pool for execution. It is also possible to batch orders into transactions as follows:
+
+```python
+with market.transaction() as t:
+    market.place_order(order)  # executed immediately in separate transaction
+    t.place_order(order)  # executed on transaction __exit__
+
+with market.transaction() as t:
+    t.place_order(order)
+    
+    t.execute()  # above order executed
+    
+    t.cancel_order(order)
+    t.place_order(order)  # both executed on transaction __exit__
 ```
 
 ### Stream class
@@ -138,5 +180,29 @@ framework.run()
 
 Note the use of market filter to pass the file directories.
 
+Sometimes a subset of the market lifetime is required, this can be optimised by limiting the number of updates to process resulting in faster backtesting:
+
+```python
+strategy = ExampleStrategy(
+    market_filter={
+        "markets": ["/tmp/marketdata/1.170212754"],
+        "listener_kwargs": {"inplay": False, "seconds_to_start": 600},
+    }
+)
+```
+
+The extra kwargs above will limit processing to preplay in the final 10 minutes.
+
 !!! tip
     Multiple strategies and markets can be passed, flumine will pass the MarketBooks to the correct strategy via its subscription.
+
+Backtesting uses the `SimulatedExecution` execution class and tries to accurately simulate matching with the following:
+
+- Place/Cancel/Replace latency delay added
+- BetDelay added based on market
+- Queue positioning based on liquidity available
+
+Limitations:
+
+- Queue cancellations
+- Double counting of liquidity

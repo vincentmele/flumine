@@ -1,13 +1,18 @@
+import logging
+import warnings
 from typing import Type, Iterator
 from betfairlightweight import filters
 from betfairlightweight.resources import MarketBook
 
-from ..streams.marketstream import BaseStream, MarketStream
-from ..markets.market import Market
 from .runnercontext import RunnerContext
-from ..utils import create_cheap_hash
 from ..clients import BaseClient
+from ..markets.market import Market
+from ..streams.marketstream import BaseStream, MarketStream
+from ..utils import create_cheap_hash
 
+logger = logging.getLogger(__name__)
+
+STRATEGY_NAME_HASH_LENGTH = 13
 DEFAULT_MARKET_DATA_FILTER = filters.streaming_market_data_filter(
     fields=[
         "EX_ALL_OFFERS",
@@ -22,6 +27,17 @@ DEFAULT_MARKET_DATA_FILTER = filters.streaming_market_data_filter(
 
 
 class BaseStrategy:
+
+    """
+    Strategy object to process MarketBook data
+    from streams, order placement and handling
+    logic to be added where required. Only
+    MarketBooks from provided filter and data
+    filter are processed.
+    Runner context available to store current
+    live trades.
+    """
+
     def __init__(
         self,
         market_filter: dict,
@@ -34,19 +50,26 @@ class BaseStrategy:
         max_selection_exposure: float = 100,
         max_order_exposure: float = 10,
         client: BaseClient = None,
+        max_trade_count: int = 1e6,
+        max_live_trade_count: int = 1,
+        multi_order_trades: bool = False,
+        log_validation_failures: bool = False,
     ):
         """
-        Processes data from streams.
-
         :param market_filter: Streaming market filter
         :param market_data_filter: Streaming market data filter
         :param streaming_timeout: Streaming timeout in seconds, will call snap() on cache
         :param conflate_ms: Streaming conflation
-        :param stream_class: Can be Market or Data
-        :param name: Strategy name
-        :param context: Dictionary holding additional vars
+        :param stream_class: Can be Market or Data (raw)
+        :param name: Strategy name (will default to class name)
+        :param context: Dictionary holding additional user specific vars
         :param max_selection_exposure: Max exposure per selection
         :param max_order_exposure: Max exposure per order
+        :param client: flumine client used for order placement
+        :param max_trade_count: max total number of trades per runner
+        :param max_live_trade_count: max live (with executable orders) trades per runner
+        :param multi_order_trades: allow multiple live orders per trade
+        :param log_validation_failures: determines whether or not to log validation failures
         """
         self.market_filter = market_filter
         self.market_data_filter = market_data_filter or DEFAULT_MARKET_DATA_FILTER
@@ -58,9 +81,20 @@ class BaseStrategy:
         self.max_selection_exposure = max_selection_exposure
         self.max_order_exposure = max_order_exposure
         self.client = client
+        self.max_trade_count = max_trade_count
+        self.max_live_trade_count = max_live_trade_count
+        self.multi_order_trades = multi_order_trades
 
         self._invested = {}  # {(marketId, selectionId, handicap): RunnerContext}
         self.streams = []  # list of streams strategy is subscribed
+        self.historic_stream_ids = []
+        if log_validation_failures:
+            warnings.warn(
+                "strategy.log_validation_failures is deprecated and will be removed from v1.18 onwards (all validation failures are now logged in the trading control)",
+                PendingDeprecationWarning,
+            )
+        # cache
+        self.name_hash = create_cheap_hash(self.name, STRATEGY_NAME_HASH_LENGTH)
 
     def check_market(self, market: Market, market_book: MarketBook) -> bool:
         if market_book.streaming_unique_id not in self.stream_ids:
@@ -102,25 +136,97 @@ class BaseStrategy:
         # called before flumine ends
         return
 
+    def remove_market(self, market_id: str) -> None:
+        to_remove = []
+        for invested in self._invested:
+            if invested[0] == market_id:
+                to_remove.append(invested)
+        for i in to_remove:
+            del self._invested[i]
+
     # order
-    def place_order(self, market: Market, order) -> None:
-        runner_context = self.get_runner_context(*order.lookup)
-        if self.validate_order(runner_context, order):
-            runner_context.place()
-            market.place_order(order)
+    def place_order(
+        self,
+        market: Market,
+        order,
+        market_version: int = None,
+    ) -> bool:
+        warnings.warn(
+            "strategy.place_order is deprecated and will be removed from v1.18 onwards, use market.place_order instead",
+            PendingDeprecationWarning,
+        )
+        return market.place_order(order, market_version)
 
-    def cancel_order(self, market: Market, order, size_reduction: float = None) -> None:
-        market.cancel_order(order, size_reduction)
+    def cancel_order(
+        self,
+        market: Market,
+        order,
+        size_reduction: float = None,
+    ) -> bool:
+        warnings.warn(
+            "strategy.cancel_order is deprecated and will be removed from v1.18 onwards, use market.cancel_order instead",
+            PendingDeprecationWarning,
+        )
+        return market.cancel_order(order, size_reduction)
 
-    def update_order(self, market: Market, order, new_persistence_type: str) -> None:
-        market.update_order(order, new_persistence_type)
+    def update_order(
+        self,
+        market: Market,
+        order,
+        new_persistence_type: str,
+    ) -> bool:
+        warnings.warn(
+            "strategy.update_order is deprecated and will be removed from v1.18 onwards, use market.update_order instead",
+            PendingDeprecationWarning,
+        )
+        return market.update_order(order, new_persistence_type)
 
-    def replace_order(self, market: Market, order, new_price: float) -> None:
-        market.replace_order(order, new_price)
+    def replace_order(
+        self,
+        market: Market,
+        order,
+        new_price: float,
+        market_version: int = None,
+    ) -> bool:
+        warnings.warn(
+            "strategy.replace_order is deprecated and will be removed from v1.18 onwards, use market.replace_order instead",
+            PendingDeprecationWarning,
+        )
+        return market.replace_order(order, new_price, market_version)
 
     def validate_order(self, runner_context: RunnerContext, order) -> bool:
-        # todo multi/count
-        if runner_context.executable_orders:
+        # allow multiple orders per trade
+        if self.multi_order_trades:
+            if order.trade.id in runner_context.live_trades:
+                return True
+        # validate context
+        if runner_context.trade_count >= self.max_trade_count:
+            order.violation_msg = "strategy.validate_order failed: trade_count ({0}) >= max_trade_count ({1})".format(
+                runner_context.trade_count, self.max_live_trade_count
+            )
+            return False
+        elif runner_context.live_trade_count >= self.max_live_trade_count:
+            order.violation_msg = "strategy.validate_order failed: live_trade_count ({0}) >= max_live_trade_count ({1})".format(
+                runner_context.live_trade_count, self.max_live_trade_count
+            )
+            return False
+        elif (
+            runner_context.placed_elapsed_seconds
+            and runner_context.placed_elapsed_seconds < order.trade.place_reset_seconds
+        ):
+            order.violation_msg = "strategy.validate_order failed: placed_elapsed_seconds ({0}) < place_reset_seconds ({1})".format(
+                runner_context.placed_elapsed_seconds,
+                order.trade.place_reset_seconds,
+            )
+            return False
+        elif (
+            runner_context.reset_elapsed_seconds
+            and runner_context.reset_elapsed_seconds < order.trade.reset_seconds
+        ):
+            order.violation_msg = "strategy.validate_order failed: reset_elapsed_seconds ({0}) < reset_seconds ({1})".format(
+                runner_context.reset_elapsed_seconds,
+                order.trade.reset_seconds,
+            )
             return False
         else:
             return True
@@ -144,7 +250,10 @@ class BaseStrategy:
 
     @property
     def stream_ids(self) -> list:
-        return [stream.stream_id for stream in self.streams]
+        if self.historic_stream_ids:
+            return self.historic_stream_ids
+        else:
+            return [stream.stream_id for stream in self.streams]
 
     @property
     def info(self) -> dict:
@@ -155,17 +264,18 @@ class BaseStrategy:
             "streaming_timeout": self.streaming_timeout,
             "conflate_ms": self.conflate_ms,
             "stream_ids": self.stream_ids,
+            "max_selection_exposure": self.max_selection_exposure,
+            "max_order_exposure": self.max_order_exposure,
+            "max_live_trade_count": self.max_live_trade_count,
+            "max_trade_count": self.max_trade_count,
             "context": self.context,
             "name_hash": self.name_hash,
+            "client": str(self.client),
         }
 
     @property
     def name(self) -> str:
         return self._name or self.__class__.__name__
-
-    @property
-    def name_hash(self) -> str:
-        return create_cheap_hash(self.name, 13)
 
     def __str__(self):
         return "{0}".format(self.name)

@@ -2,7 +2,7 @@ import logging
 
 from ..clients.clients import ExchangeType
 from ..order.ordertype import OrderTypes
-from ..order.orderpackage import OrderPackageType
+from ..order.orderpackage import OrderPackageType, BaseOrder
 from . import BaseControl
 from .. import utils
 
@@ -12,16 +12,15 @@ logger = logging.getLogger(__name__)
 class OrderValidation(BaseControl):
 
     """
-    Checks order price and size is valid for
+    Validates order price and size is valid for
     exchange.
     """
 
     NAME = "ORDER_VALIDATION"
 
-    def _validate(self, order_package):
-        for order in order_package:
-            if order.EXCHANGE == ExchangeType.BETFAIR:
-                self._validate_betfair_order(order)
+    def _validate(self, order: BaseOrder, package_type: OrderPackageType) -> None:
+        if order.EXCHANGE == ExchangeType.BETFAIR:
+            self._validate_betfair_order(order)
 
     def _validate_betfair_order(self, order):
         if order.order_type.ORDER_TYPE == OrderTypes.LIMIT:
@@ -60,6 +59,8 @@ class OrderValidation(BaseControl):
 
     def _validate_betfair_min_size(self, order, order_type):
         client = self.flumine.client
+        if client.min_bet_validation is False:
+            return  # some accounts do not have min bet restrictions
         if order_type == OrderTypes.LIMIT:
             if (
                 order.order_type.size < client.min_bet_size
@@ -98,54 +99,61 @@ class OrderValidation(BaseControl):
 class StrategyExposure(BaseControl):
 
     """
-    Checks exposure does not exceed strategy
-    max exposure.
+    Validates:
+        - `strategy.validate_order` function
+        - `strategy.max_order_exposure` is not violated if order is executed
+        - `strategy.max_selection_exposure` is not violated if order is executed
+
+    Exposure calculation includes pending,
+    executable and execution complete orders.
     """
 
     NAME = "STRATEGY_EXPOSURE"
 
-    def _validate(self, order_package):
-        if order_package.package_type in (
+    def _validate(self, order: BaseOrder, package_type: OrderPackageType) -> None:
+        if package_type == OrderPackageType.PLACE:
+            # strategy.validate_order
+            runner_context = order.trade.strategy.get_runner_context(*order.lookup)
+            if order.trade.strategy.validate_order(runner_context, order) is False:
+                return self._on_error(order, order.violation_msg)
+
+        if package_type in (
             OrderPackageType.PLACE,
             OrderPackageType.REPLACE,  # todo potential bug?
         ):
-            for order in order_package:
-                strategy = order.trade.strategy
-
-                if order.order_type.ORDER_TYPE == OrderTypes.LIMIT:
-                    if order.side == "BACK":
-                        exposure = order.order_type.size
-                    else:
-                        exposure = (order.order_type.price - 1) * order.order_type.size
-                elif order.order_type.ORDER_TYPE == OrderTypes.LIMIT_ON_CLOSE:
-                    exposure = order.order_type.liability  # todo correct?
-                elif order.order_type.ORDER_TYPE == OrderTypes.MARKET_ON_CLOSE:
-                    exposure = order.order_type.liability
+            strategy = order.trade.strategy
+            if order.order_type.ORDER_TYPE == OrderTypes.LIMIT:
+                if order.side == "BACK":
+                    exposure = order.order_type.size
                 else:
-                    continue
+                    exposure = (order.order_type.price - 1) * order.order_type.size
+            elif order.order_type.ORDER_TYPE == OrderTypes.LIMIT_ON_CLOSE:
+                exposure = order.order_type.liability  # todo correct?
+            elif order.order_type.ORDER_TYPE == OrderTypes.MARKET_ON_CLOSE:
+                exposure = order.order_type.liability
+            else:
+                return self._on_error(order, "Unknown order_type")
 
-                # per order
-                if exposure > strategy.max_order_exposure:
-                    self._on_error(
-                        order,
-                        "Order exposure ({0}) is greater than strategy.max_order_strategy ({1})".format(
-                            exposure, strategy.max_order_exposure
-                        ),
-                    )
-                    continue
-
-                # per selection
-                market = self.flumine.markets.markets[order_package.market_id]
-                current_selection_exposure = market.blotter.selection_exposure(
-                    strategy, lookup=order.lookup
+            # per order
+            if exposure > strategy.max_order_exposure:
+                return self._on_error(
+                    order,
+                    "Order exposure ({0}) is greater than strategy.max_order_exposure ({1})".format(
+                        exposure, strategy.max_order_exposure
+                    ),
                 )
-                if (
-                    current_selection_exposure - exposure
-                ) < -strategy.max_selection_exposure:
-                    self._on_error(
-                        order,
-                        "Potential selection exposure ({0}) is greater than strategy.max_selection_exposure ({1})".format(
-                            (current_selection_exposure - exposure),
-                            strategy.max_selection_exposure,
-                        ),
-                    )
+
+            # per selection
+            market = self.flumine.markets.markets[order.market_id]
+            selection_exposure = market.blotter.selection_exposure(
+                strategy, lookup=order.lookup
+            )
+            potential_exposure = selection_exposure + exposure
+            if potential_exposure > strategy.max_selection_exposure:
+                return self._on_error(
+                    order,
+                    "Potential selection exposure ({0:.2f}) is greater than strategy.max_selection_exposure ({1})".format(
+                        potential_exposure,
+                        strategy.max_selection_exposure,
+                    ),
+                )

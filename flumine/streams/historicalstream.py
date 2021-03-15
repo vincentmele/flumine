@@ -1,49 +1,55 @@
 import logging
 import datetime
+from typing import Optional
 from betfairlightweight.streaming import StreamListener, HistoricalGeneratorStream
-from betfairlightweight.streaming.stream import BaseStream as BFLWBaseStream
-from betfairlightweight.streaming.cache import MarketBookCache
+from betfairlightweight.streaming.stream import MarketStream, RaceStream
+from betfairlightweight.streaming.cache import MarketBookCache, RaceCache
 from betfairlightweight.resources.baseresource import BaseResource
+from betfairlightweight.compat import json
 
 from .basestream import BaseStream
+from ..exceptions import ListenerError
 
 logger = logging.getLogger(__name__)
 
 
-class Stream(BFLWBaseStream):
+class FlumineMarketStream(MarketStream):
     """
     Custom bflw stream to speed up processing
     by limiting to inplay/not inplay or limited
     seconds to start.
+    `_process` updated to not call `on_process`
+    which reduces some function calls.
     """
 
-    _lookup = "mc"
-
-    def _process(self, data: list, publish_time: int) -> None:
+    def _process(self, data: list, publish_time: int) -> bool:
         for market_book in data:
             market_id = market_book["id"]
+            full_image = market_book.get("img", False)
             market_book_cache = self._caches.get(market_id)
+
             if (
-                market_book.get("img") or market_book_cache is None
+                full_image or market_book_cache is None
             ):  # historic data does not contain img
                 if "marketDefinition" not in market_book:
-                    logger.error(
-                        "[MarketStream: %s] Unable to add %s to cache due to marketDefinition "
-                        "not being present (make sure EX_MARKET_DEF is requested)"
-                        % (self.unique_id, market_id)
+                    logger.warning(
+                        "[%s: %s]: Missing marketDefinition on market %s resulting "
+                        "in potential missing data in the MarketBook (make sure "
+                        "EX_MARKET_DEF is requested)"
+                        % (self, self.unique_id, market_id)
                     )
-                    continue
                 market_book_cache = MarketBookCache(
-                    publish_time=publish_time, **market_book
+                    market_id, publish_time, self._lightweight
                 )
                 self._caches[market_id] = market_book_cache
                 logger.info(
-                    "[MarketStream: %s] %s added, %s markets in cache"
-                    % (self.unique_id, market_id, len(self._caches))
+                    "[%s: %s]: %s added, %s markets in cache"
+                    % (self, self.unique_id, market_id, len(self._caches))
                 )
-            else:
-                market_book_cache.update_cache(market_book, publish_time)
-                self._updates_processed += 1
+
+            market_book_cache.update_cache(market_book, publish_time)
+            self._updates_processed += 1
+        return False
 
     def snap(self, market_ids: list = None) -> list:
         market_books = []
@@ -51,9 +57,9 @@ class Stream(BFLWBaseStream):
             if market_ids and cache.market_id not in market_ids:
                 continue
             # if market has closed send regardless
-            if cache.market_definition["status"] != "CLOSED":
+            if cache._definition_status != "CLOSED":
                 if self._listener.inplay:
-                    if not cache.market_definition["inPlay"]:
+                    if not cache._definition_in_play:
                         continue
                 elif self._listener.seconds_to_start:
                     _now = datetime.datetime.utcfromtimestamp(cache.publish_time / 1e3)
@@ -64,12 +70,36 @@ class Stream(BFLWBaseStream):
                     if seconds_to_start > self._listener.seconds_to_start:
                         continue
                 if self._listener.inplay is False:
-                    if cache.market_definition["inPlay"]:
+                    if cache._definition_in_play:
                         continue
-            market_books.append(
-                cache.create_resource(self.unique_id, self._lightweight)
-            )
+            market_books.append(cache.create_resource(self.unique_id, snap=True))
         return market_books
+
+
+class FlumineRaceStream(RaceStream):
+    """
+    `_process` updated to not call `on_process`
+    which reduces some function calls.
+    # todo snap optimisation?
+    """
+
+    def _process(self, race_updates: list, publish_time: int) -> bool:
+        for update in race_updates:
+            market_id = update["mid"]
+            race_cache = self._caches.get(market_id)
+            if race_cache is None:
+                race_id = update.get("id")
+                race_cache = RaceCache(
+                    market_id, publish_time, race_id, self._lightweight
+                )
+                self._caches[market_id] = race_cache
+                logger.info(
+                    "[%s: %s]: %s added, %s markets in cache"
+                    % (self, self.unique_id, market_id, len(self._caches))
+                )
+            race_cache.update_cache(update, publish_time)
+            self._updates_processed += 1
+        return False
 
 
 class HistoricListener(StreamListener):
@@ -83,9 +113,41 @@ class HistoricListener(StreamListener):
         self.inplay = inplay
         self.seconds_to_start = seconds_to_start
 
-    def _add_stream(self, unique_id, stream_type):
-        if stream_type == "marketSubscription":
-            return Stream(self)
+    def _add_stream(self, unique_id: int, operation: str):
+        if operation == "marketSubscription":
+            return FlumineMarketStream(self, unique_id)
+        elif operation == "orderSubscription":
+            raise ListenerError("Unable to process order stream")
+        elif operation == "raceSubscription":
+            return FlumineRaceStream(self, unique_id)
+
+    def on_data(self, raw_data: str) -> Optional[bool]:
+        try:
+            data = json.loads(raw_data)
+        except ValueError:
+            logger.error("value error: %s" % raw_data)
+            return
+
+        # remove error handler / operation check
+
+        # skip on_change / on_update as we know it is always an update
+        publish_time = data["pt"]
+        self.stream._process(data[self.stream._lookup], publish_time)
+
+
+class FlumineHistoricalGeneratorStream(HistoricalGeneratorStream):
+    """Super fast historical stream"""
+
+    def _read_loop(self) -> dict:
+        self.listener.register_stream(self.unique_id, self.operation)
+        listener_on_data = self.listener.on_data  # cache functions
+        stream_snap = self.listener.stream.snap
+        with open(self.file_path, "r") as f:
+            for update in f:
+                listener_on_data(update)
+                data = stream_snap()
+                if data:  # can return empty list
+                    yield data
 
 
 class HistoricalStream(BaseStream):
@@ -100,9 +162,14 @@ class HistoricalStream(BaseStream):
         pass
 
     def create_generator(self):
-        stream = HistoricalGeneratorStream(
+        self._listener.debug = False  # prevent logging calls on each update (slow)
+        self._listener.update_clk = (
+            False  # do not update clk on updates (not required when backtesting)
+        )
+        stream = FlumineHistoricalGeneratorStream(
             file_path=self.market_filter,
             listener=self._listener,
             operation=self.operation,
+            unique_id=self.stream_id,
         )
         return stream.get_generator()
