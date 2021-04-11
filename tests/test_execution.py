@@ -35,9 +35,10 @@ class BaseExecutionTest(unittest.TestCase):
     @mock.patch("flumine.execution.baseexecution.BaseExecution._get_http_session")
     @mock.patch("flumine.execution.baseexecution.BaseExecution.execute_place")
     def test_handler_place(self, mock_execute_place, mock__get_http_session):
-        mock_order_package = mock.Mock()
+        mock_execute_place.__name__ = "execute_place"
+        mock_order_package = mock.Mock(elapsed_seconds=1)
         mock_order_package.package_type = OrderPackageType.PLACE
-        mock_thread_pool = mock.Mock()
+        mock_thread_pool = mock.Mock(_threads=())
         self.execution._thread_pool = mock_thread_pool
         self.execution.handler(mock_order_package)
         mock_thread_pool.submit.assert_called_with(
@@ -48,9 +49,10 @@ class BaseExecutionTest(unittest.TestCase):
     @mock.patch("flumine.execution.baseexecution.BaseExecution._get_http_session")
     @mock.patch("flumine.execution.baseexecution.BaseExecution.execute_cancel")
     def test_handler_cancel(self, mock_execute_cancel, mock__get_http_session):
-        mock_order_package = mock.Mock()
+        mock_execute_cancel.__name__ = "execute_cancel"
+        mock_order_package = mock.Mock(elapsed_seconds=1)
         mock_order_package.package_type = OrderPackageType.PLACE.CANCEL
-        mock_thread_pool = mock.Mock()
+        mock_thread_pool = mock.Mock(_threads=())
         self.execution._thread_pool = mock_thread_pool
         self.execution.handler(mock_order_package)
         mock_thread_pool.submit.assert_called_with(
@@ -61,9 +63,10 @@ class BaseExecutionTest(unittest.TestCase):
     @mock.patch("flumine.execution.baseexecution.BaseExecution._get_http_session")
     @mock.patch("flumine.execution.baseexecution.BaseExecution.execute_replace")
     def test_handler_replace(self, mock_execute_replace, mock__get_http_session):
-        mock_order_package = mock.Mock()
+        mock_execute_replace.__name__ = "execute_replace"
+        mock_order_package = mock.Mock(elapsed_seconds=1)
         mock_order_package.package_type = OrderPackageType.REPLACE
-        mock_thread_pool = mock.Mock()
+        mock_thread_pool = mock.Mock(_threads=())
         self.execution._thread_pool = mock_thread_pool
         self.execution.handler(mock_order_package)
         mock_thread_pool.submit.assert_called_with(
@@ -74,9 +77,10 @@ class BaseExecutionTest(unittest.TestCase):
     @mock.patch("flumine.execution.baseexecution.BaseExecution._get_http_session")
     @mock.patch("flumine.execution.baseexecution.BaseExecution.execute_update")
     def test_handler_update(self, mock_execute_update, mock__get_http_session):
-        mock_order_package = mock.Mock()
+        mock_execute_update.__name__ = "execute_update"
+        mock_order_package = mock.Mock(elapsed_seconds=1)
         mock_order_package.package_type = OrderPackageType.UPDATE
-        mock_thread_pool = mock.Mock()
+        mock_thread_pool = mock.Mock(_threads=())
         self.execution._thread_pool = mock_thread_pool
         self.execution.handler(mock_order_package)
         mock_thread_pool.submit.assert_called_with(

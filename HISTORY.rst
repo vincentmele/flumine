@@ -3,6 +3,58 @@
 Release History
 ---------------
 
+1.18.1 (2021-04-08)
++++++++++++++++++++
+
+**Improvements**
+
+- `market_type` filter enabled when backtesting markets
+- Remove temp logging
+
+**Bug Fixes**
+
+- Validate logging typo
+
+1.18.0 (2021-04-07)
++++++++++++++++++++
+
+**Improvements**
+
+- #404 Multi market processing (concurrent event market processing)
+- strategy order placement depreciated (breaking change as per warning version 1.17.0)
+- strategy.log_validation_failures depreciated (breaking change as per warning version 1.17.7)
+- Cleared order added to order object on closure (@arch4672)
+- gzip market catalogue data in marketrecorder.py example
+
+**Bug Fixes**
+
+- Nasty bug fixed in the way live orders are completed when backtesting (has potentially impacted previous tests)
+- Trade.create_order now correctly pulls handicap from trade (was defaulting to 0)
+
+1.17.15 (2021-03-25)
++++++++++++++++++++
+
+**Improvements**
+
+- Blotter exposure refactoring out the get_worst_possible_profit method (@jsphon)
+- Market recorder example updated to use gzip compression
+
+1.17.14 (2021-03-24)
++++++++++++++++++++
+
+**Improvements**
+
+- Execution / thread pool state logging
+- Default market recorder example to not remove files on clean up
+
+1.17.13 (2021-03-22)
++++++++++++++++++++
+
+**Improvements**
+
+- Market recorder mode added to client (@jorgegarcia7)
+- Further execution logging (trying to find time)
+
 1.17.12 (2021-03-15)
 +++++++++++++++++++
 

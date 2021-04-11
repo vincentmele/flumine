@@ -8,6 +8,7 @@ from .historicalstream import HistoricalStream
 from .orderstream import OrderStream
 from .simulatedorderstream import SimulatedOrderStream
 from ..clients import ExchangeType, BaseClient
+from ..utils import get_file_md
 
 logger = logging.getLogger(__name__)
 
@@ -21,16 +22,36 @@ class Streams:
     def __call__(self, strategy: BaseStrategy) -> None:
         if self.flumine.BACKTEST:
             markets = strategy.market_filter.get("markets")
+            market_types = strategy.market_filter.get("market_types")
+            event_processing = strategy.market_filter.get("event_processing", False)
+            events = strategy.market_filter.get("events")
             listener_kwargs = strategy.market_filter.get("listener_kwargs", {})
-            if markets is None:
-                logging.warning("No markets found for strategy {0}".format(strategy))
-            else:
-                for market in markets:
-                    stream = self.add_historical_stream(
-                        strategy, market, **listener_kwargs
+            if markets and events:
+                logger.warning(
+                    "Markets and events found for strategy {0} skipping as flumine can only handle one type".format(
+                        strategy
                     )
-                    strategy.streams.append(stream)
-                    strategy.historic_stream_ids.append(stream.stream_id)
+                )
+            elif markets is None and events is None:
+                logger.warning(
+                    "No markets or events found for strategy {0}".format(strategy)
+                )
+            elif markets:
+                for market in markets:
+                    market_type = get_file_md(market, "marketType")
+                    if market_types and market_type and market_type not in market_types:
+                        logger.warning(
+                            "Skipping market %s (%s) for strategy %s"
+                            % (market, market_type, strategy)
+                        )
+                    else:
+                        stream = self.add_historical_stream(
+                            strategy, market, event_processing, **listener_kwargs
+                        )
+                        strategy.streams.append(stream)
+                        strategy.historic_stream_ids.append(stream.stream_id)
+            elif events:
+                raise NotImplementedError()
         else:
             stream = self.add_stream(strategy)
             strategy.streams.append(stream)
@@ -78,17 +99,34 @@ class Streams:
             return stream
 
     def add_historical_stream(
-        self, strategy: BaseStrategy, market, **listener_kwargs
+        self,
+        strategy: BaseStrategy,
+        market: str,
+        event_processing: bool,
+        **listener_kwargs
     ) -> HistoricalStream:
         for stream in self:
-            if stream.market_filter == market:
+            if (
+                stream.market_filter == market
+                and stream.event_processing == event_processing
+            ):
                 return stream
         else:
             stream_id = self._increment_stream_id()
+            event_id = get_file_md(market, "eventId")
+            if event_processing and event_id is None:
+                logger.warning("EventId not found for market %s" % market)
             logger.info(
                 "Creating new {0} ({1}) for strategy {2}".format(
-                    HistoricalStream, stream_id, strategy
-                )
+                    HistoricalStream.__name__, stream_id, strategy
+                ),
+                extra={
+                    "strategy": strategy,
+                    "stream_id": stream_id,
+                    "market_filter": market,
+                    "event_id": event_id,
+                    "event_processing": event_processing,
+                },
             )
             stream = HistoricalStream(
                 flumine=self.flumine,
@@ -98,6 +136,8 @@ class Streams:
                 streaming_timeout=strategy.streaming_timeout,
                 conflate_ms=strategy.conflate_ms,
                 output_queue=False,
+                event_processing=event_processing,
+                event_id=event_id,
                 **listener_kwargs,
             )
             self._streams.append(stream)

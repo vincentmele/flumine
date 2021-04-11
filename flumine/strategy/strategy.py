@@ -1,5 +1,4 @@
 import logging
-import warnings
 from typing import Type, Iterator
 from betfairlightweight import filters
 from betfairlightweight.resources import MarketBook
@@ -8,11 +7,10 @@ from .runnercontext import RunnerContext
 from ..clients import BaseClient
 from ..markets.market import Market
 from ..streams.marketstream import BaseStream, MarketStream
-from ..utils import create_cheap_hash
+from ..utils import create_cheap_hash, STRATEGY_NAME_HASH_LENGTH
 
 logger = logging.getLogger(__name__)
 
-STRATEGY_NAME_HASH_LENGTH = 13
 DEFAULT_MARKET_DATA_FILTER = filters.streaming_market_data_filter(
     fields=[
         "EX_ALL_OFFERS",
@@ -53,7 +51,6 @@ class BaseStrategy:
         max_trade_count: int = 1e6,
         max_live_trade_count: int = 1,
         multi_order_trades: bool = False,
-        log_validation_failures: bool = False,
     ):
         """
         :param market_filter: Streaming market filter
@@ -69,7 +66,6 @@ class BaseStrategy:
         :param max_trade_count: max total number of trades per runner
         :param max_live_trade_count: max live (with executable orders) trades per runner
         :param multi_order_trades: allow multiple live orders per trade
-        :param log_validation_failures: determines whether or not to log validation failures
         """
         self.market_filter = market_filter
         self.market_data_filter = market_data_filter or DEFAULT_MARKET_DATA_FILTER
@@ -88,11 +84,6 @@ class BaseStrategy:
         self._invested = {}  # {(marketId, selectionId, handicap): RunnerContext}
         self.streams = []  # list of streams strategy is subscribed
         self.historic_stream_ids = []
-        if log_validation_failures:
-            warnings.warn(
-                "strategy.log_validation_failures is deprecated and will be removed from v1.18 onwards (all validation failures are now logged in the trading control)",
-                PendingDeprecationWarning,
-            )
         # cache
         self.name_hash = create_cheap_hash(self.name, STRATEGY_NAME_HASH_LENGTH)
 
@@ -144,56 +135,6 @@ class BaseStrategy:
         for i in to_remove:
             del self._invested[i]
 
-    # order
-    def place_order(
-        self,
-        market: Market,
-        order,
-        market_version: int = None,
-    ) -> bool:
-        warnings.warn(
-            "strategy.place_order is deprecated and will be removed from v1.18 onwards, use market.place_order instead",
-            PendingDeprecationWarning,
-        )
-        return market.place_order(order, market_version)
-
-    def cancel_order(
-        self,
-        market: Market,
-        order,
-        size_reduction: float = None,
-    ) -> bool:
-        warnings.warn(
-            "strategy.cancel_order is deprecated and will be removed from v1.18 onwards, use market.cancel_order instead",
-            PendingDeprecationWarning,
-        )
-        return market.cancel_order(order, size_reduction)
-
-    def update_order(
-        self,
-        market: Market,
-        order,
-        new_persistence_type: str,
-    ) -> bool:
-        warnings.warn(
-            "strategy.update_order is deprecated and will be removed from v1.18 onwards, use market.update_order instead",
-            PendingDeprecationWarning,
-        )
-        return market.update_order(order, new_persistence_type)
-
-    def replace_order(
-        self,
-        market: Market,
-        order,
-        new_price: float,
-        market_version: int = None,
-    ) -> bool:
-        warnings.warn(
-            "strategy.replace_order is deprecated and will be removed from v1.18 onwards, use market.replace_order instead",
-            PendingDeprecationWarning,
-        )
-        return market.replace_order(order, new_price, market_version)
-
     def validate_order(self, runner_context: RunnerContext, order) -> bool:
         # allow multiple orders per trade
         if self.multi_order_trades:
@@ -202,7 +143,7 @@ class BaseStrategy:
         # validate context
         if runner_context.trade_count >= self.max_trade_count:
             order.violation_msg = "strategy.validate_order failed: trade_count ({0}) >= max_trade_count ({1})".format(
-                runner_context.trade_count, self.max_live_trade_count
+                runner_context.trade_count, self.max_trade_count
             )
             return False
         elif runner_context.live_trade_count >= self.max_live_trade_count:

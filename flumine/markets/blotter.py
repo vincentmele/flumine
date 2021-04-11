@@ -6,6 +6,7 @@ from ..order.ordertype import OrderTypes
 from ..utils import (
     calculate_unmatched_exposure,
     calculate_matched_exposure,
+    STRATEGY_NAME_HASH_LENGTH,
 )
 from ..order.order import BaseOrder, OrderStatus
 
@@ -66,7 +67,11 @@ class Blotter:
                     order.runner_status = runner.status
 
     def process_cleared_orders(self, cleared_orders) -> list:
-        # todo update order.cleared?
+        for cleared_order in cleared_orders.orders:
+            order_id = cleared_order.customer_order_ref[STRATEGY_NAME_HASH_LENGTH + 1 :]
+            if order_id in self:
+                self[order_id].cleared_order = cleared_order
+
         return [order for order in self]
 
     """ position """
@@ -77,6 +82,15 @@ class Blotter:
             positive = potential loss
             zero = no potential loss
         """
+        exposures = self.get_exposures(strategy=strategy, lookup=lookup)
+        exposure = -min(
+            exposures["worst_possible_profit_on_win"],
+            exposures["worst_possible_profit_on_lose"],
+        )
+        return max(exposure, 0.0)
+
+    def get_exposures(self, strategy, lookup: tuple) -> dict:
+        """Returns strategy/selection exposures as a dict."""
         mb, ml = [], []  # matched bets, (price, size)
         ub, ul = [], []  # unmatched bets, (price, size)
         moc_win_liability = 0.0
@@ -118,8 +132,15 @@ class Blotter:
         worst_possible_profit_on_lose = (
             matched_exposure[1] + unmatched_exposure[1] + moc_lose_liability
         )
-        exposure = -min(worst_possible_profit_on_win, worst_possible_profit_on_lose)
-        return max(exposure, 0.0)
+
+        return {
+            "matched_profit_if_win": matched_exposure[0],
+            "matched_profit_if_lose": matched_exposure[1],
+            "worst_potential_unmatched_profit_if_win": unmatched_exposure[0],
+            "worst_potential_unmatched_profit_if_lose": unmatched_exposure[1],
+            "worst_possible_profit_on_win": worst_possible_profit_on_win,
+            "worst_possible_profit_on_lose": worst_possible_profit_on_lose,
+        }
 
     """ getters / setters """
 

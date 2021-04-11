@@ -39,8 +39,20 @@ class BaseExecution:
             func = self.execute_replace
         else:
             raise NotImplementedError()
-
         self._thread_pool.submit(func, order_package, http_session)
+        logger.info(
+            "Thread pool submit",
+            extra={
+                "trading_function": func.__name__,
+                "session": http_session,
+                "latency": round(order_package.elapsed_seconds, 4),
+                "order_package": order_package.info,
+                "thread_pool": {
+                    "num_threads": len(self._thread_pool._threads),
+                    "work_queue_size": self._thread_pool._work_queue.qsize(),
+                },
+            },
+        )
 
     def execute_place(
         self, order_package: BaseOrderPackage, http_session: requests.Session
