@@ -4,6 +4,8 @@ import time
 import logging
 import gzip
 import boto3
+import queue
+import threading
 from boto3.s3.transfer import S3Transfer, TransferConfig
 from botocore.exceptions import BotoCoreError
 
@@ -15,23 +17,31 @@ logger = logging.getLogger(__name__)
 
 class MarketRecorder(BaseStrategy):
 
+    """
+    Simple raw streaming market recorder, context:
+
+        market_expiration: int, Seconds to wait after market closure before removing files
+        remove_file: bool, Remove txt file during cleanup
+        remove_gz_file: bool, Remove gz file during cleanup
+        force_update: bool, Update zip/closure if update received after closure
+        load_market_catalogue: bool, Store marketCatalogue as {marketId}.json
+        local_dir: str, Dir to store data
+        recorder_id: str, Directory name (defaults to random uuid)
+    """
+
     MARKET_ID_LOOKUP = "id"
 
     def __init__(self, *args, **kwargs):
         BaseStrategy.__init__(self, *args, **kwargs)
         self._market_expiration = self.context.get("market_expiration", 3600)  # seconds
-        self._remove_file = self.context.get(
-            "remove_file", False
-        )  # remove txt file during cleanup
-        self._remove_gz_file = self.context.get(
-            "remove_gz_file", False
-        )  # remove compressed file during cleanup
-        self._force_update = self.context.get(
-            "force_update", True
-        )  # update after initial closure
+        self._remove_file = self.context.get("remove_file", False)
+        self._remove_gz_file = self.context.get("remove_gz_file", False)
+        self._force_update = self.context.get("force_update", True)
+        self._load_market_catalogue = self.context.get("load_market_catalogue", True)
         self.local_dir = self.context.get("local_dir", "/tmp")
-        self.recorder_id = create_short_uuid()
+        self.recorder_id = self.context.get("recorder_id", create_short_uuid())
         self._loaded_markets = []  # list of marketIds
+        self._queue = queue.Queue()
 
     def add(self) -> None:
         logger.info("Adding strategy %s with id %s" % (self.name, self.recorder_id))
@@ -42,6 +52,14 @@ class MarketRecorder(BaseStrategy):
         directory = os.path.join(self.local_dir, self.recorder_id)
         if not os.path.exists(directory):
             os.makedirs(directory)
+
+    def start(self) -> None:
+        # start load processor thread
+        threading.Thread(
+            name="{0}_load_processor".format(self.name),
+            target=self._load_processor,
+            daemon=True,
+        ).start()
 
     def process_raw_data(self, publish_time, data):
         market_id = data.get(self.MARKET_ID_LOOKUP)
@@ -63,6 +81,8 @@ class MarketRecorder(BaseStrategy):
                 )
             else:
                 return
+        else:
+            self._loaded_markets.append(market_id)
         logger.info("Closing market %s" % market_id)
 
         file_dir = os.path.join(self.local_dir, self.recorder_id, market_id)
@@ -85,16 +105,24 @@ class MarketRecorder(BaseStrategy):
             )
             return
 
-        # compress file
-        compress_file_dir = self._compress_file(file_dir)
+        self._queue.put((market, file_dir, market_definition))
 
-        # core load code
-        self._load(market, compress_file_dir, market_definition)
-
-        # clean up
-        self._clean_up()
-
-        self._loaded_markets.append(market_id)
+    def _load_processor(self):
+        # process compression/load in thread
+        while True:
+            market, file_dir, market_definition = self._queue.get(block=True)
+            # check file still exists (potential race condition)
+            if not os.path.isfile(file_dir):
+                logger.warning(
+                    "File: %s does not exist in %s" % (market.market_id, file_dir)
+                )
+                continue
+            # compress file
+            compress_file_dir = self._compress_file(file_dir)
+            # core load code
+            self._load(market, compress_file_dir, market_definition)
+            # clean up
+            self._clean_up()
 
     def _compress_file(self, file_dir: str) -> str:
         """compresses txt file into filename.gz"""
@@ -105,7 +133,29 @@ class MarketRecorder(BaseStrategy):
         return compressed_file_dir
 
     def _load(self, market, compress_file_dir: str, market_definition: dict) -> None:
-        pass
+        # store marketCatalogue data `{marketId}.json.gz`
+        if market and self._load_market_catalogue:
+            if market.market_catalogue is None:
+                logger.warning(
+                    "No marketCatalogue data available for %s" % market.market_id
+                )
+                return
+            market_catalogue_compressed = self._compress_catalogue(
+                market.market_catalogue
+            )
+            # save to file
+            file_dir = os.path.join(
+                self.local_dir, self.recorder_id, "{0}.json.gz".format(market.market_id)
+            )
+            with open(file_dir, "wb") as f:
+                f.write(market_catalogue_compressed)
+
+    @staticmethod
+    def _compress_catalogue(market_catalogue) -> bytes:
+        market_catalogue_dumped = market_catalogue.json()
+        if isinstance(market_catalogue_dumped, str):
+            market_catalogue_dumped = market_catalogue_dumped.encode("utf-8")
+        return gzip.compress(market_catalogue_dumped)
 
     def _clean_up(self) -> None:
         """If gz > market_expiration old remove
@@ -114,23 +164,26 @@ class MarketRecorder(BaseStrategy):
         directory = os.path.join(self.local_dir, self.recorder_id)
         for file in os.listdir(directory):
             if file.endswith(".gz"):
-                file_stats = os.stat(os.path.join(directory, file))
+                gz_path = os.path.join(directory, file)
+                file_stats = os.stat(gz_path)
                 seconds_since = time.time() - file_stats.st_mtime
                 if seconds_since > self._market_expiration:
-                    txt_path = os.path.join(directory, file.split(".gz")[0])
-                    gz_path = os.path.join(directory, file)
-                    if self._remove_file:
-                        logger.info(
-                            "Removing: %s, age: %ss"
-                            % (txt_path, round(seconds_since, 2))
-                        )
-                        os.remove(txt_path)
                     if self._remove_gz_file:
                         logger.info(
                             "Removing: %s, age: %ss"
                             % (gz_path, round(seconds_since, 2))
                         )
                         os.remove(gz_path)
+                    txt_path = os.path.join(directory, file.split(".gz")[0])
+                    if os.path.exists(txt_path) and self._remove_file:
+                        file_stats = os.stat(txt_path)
+                        seconds_since = time.time() - file_stats.st_mtime
+                        if seconds_since > self._market_expiration:
+                            logger.info(
+                                "Removing: %s, age: %ss"
+                                % (txt_path, round(seconds_since, 2))
+                            )
+                            os.remove(txt_path)
 
     @staticmethod
     def _create_metadata(market_definition: dict) -> dict:
@@ -142,6 +195,15 @@ class MarketRecorder(BaseStrategy):
 
 
 class S3MarketRecorder(MarketRecorder):
+    """
+    AWS S3 version of the market recorder
+    to automate loading of compressed file
+    and marketCatalogue on closure.
+
+        bucket: str, bucket name
+        data_type: str, data type
+    """
+
     def __init__(self, *args, **kwargs):
         MarketRecorder.__init__(self, *args, **kwargs)
         self._bucket = self.context["bucket"]
@@ -155,8 +217,7 @@ class S3MarketRecorder(MarketRecorder):
         self.s3.head_bucket(Bucket=self._bucket)  # validate bucket/access
 
     def _load(self, market, compress_file_dir: str, market_definition: dict) -> None:
-        # note this will block the main handler queue during upload
-        # todo create background worker instead?
+        # load to s3
         event_type_id = (
             market_definition.get("eventTypeId", 0) if market_definition else "7"
         )
@@ -181,14 +242,14 @@ class S3MarketRecorder(MarketRecorder):
             logger.error("Error loading to s3: %s" % e)
 
         # upload marketCatalogue data
-        if market and self.context.get("load_market_catalogue", True):
+        if market and self._load_market_catalogue:
             if market.market_catalogue is None:
                 logger.warning(
                     "No marketCatalogue data available for %s" % market.market_id
                 )
                 return
-            market_catalogue_compressed = gzip.compress(
-                market.market_catalogue.json().encode("utf-8")
+            market_catalogue_compressed = self._compress_catalogue(
+                market.market_catalogue
             )
             try:
                 self.s3.put_object(

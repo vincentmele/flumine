@@ -42,6 +42,8 @@ def file_line_count(file_path: str) -> int:
 
 def get_file_md(file_dir: str, value: str) -> Optional[str]:
     # get value from raw streaming file marketDefinition
+    if isinstance(file_dir, tuple):
+        file_dir = file_dir[0]
     with open(file_dir, "r") as f:
         first_line = f.readline()
         update = json.loads(first_line)
@@ -142,9 +144,6 @@ def price_ticks_away(price: float, n_ticks: int) -> float:
         return 1000
 
 
-# todo LRU cache?
-# JH: LRU cache does not work with list inputs as they are unhashable.
-#     So might need to refactor mb and ml into tuples.
 def calculate_matched_exposure(mb: list, ml: list) -> Tuple:
     """Calculates exposure based on list
     of (price, size)
@@ -152,10 +151,16 @@ def calculate_matched_exposure(mb: list, ml: list) -> Tuple:
     """
     if not mb and not ml:
         return 0.0, 0.0
-    back_exp = sum(-i[1] for i in mb)
-    back_profit = sum((i[0] - 1) * i[1] for i in mb)
-    lay_exp = sum((i[0] - 1) * -i[1] for i in ml)
-    lay_profit = sum(i[1] for i in ml)
+    if mb:
+        back_exp = sum(-i[1] for i in mb)
+        back_profit = sum((i[0] - 1) * i[1] for i in mb)
+    else:
+        back_exp, back_profit = 0, 0
+    if ml:
+        lay_exp = sum((i[0] - 1) * -i[1] for i in ml)
+        lay_profit = sum(i[1] for i in ml)
+    else:
+        lay_exp, lay_profit = 0, 0
     _win = back_profit + lay_exp
     _lose = lay_profit + back_exp
     return round(_win, 2), round(_lose, 2)
@@ -177,7 +182,6 @@ def calculate_unmatched_exposure(ub: list, ul: list) -> Tuple:
     return round(lay_exp, 2), round(back_exp, 2)
 
 
-# todo LRU cache?
 def wap(matched: list) -> Tuple[float, float]:
     if not matched:
         return 0, 0
@@ -191,21 +195,19 @@ def wap(matched: list) -> Tuple[float, float]:
         return round(b, 2), round(a / b, 2)
 
 
-def call_check_market(
-    strategy_check_market: Callable, market, market_book: MarketBook
-) -> bool:
+def call_strategy_error_handling(
+    func: Callable, market, market_book: MarketBook
+) -> Optional[bool]:
     try:
-        return strategy_check_market(market, market_book)
+        return func(market, market_book)
     except FlumineException as e:
         logger.error(
-            "FlumineException %s in strategy_check_market %s %s"
-            % (e, strategy_check_market, market.market_id),
+            "FlumineException %s in %s (%s)" % (e, func.__name__, market.market_id),
             exc_info=True,
         )
     except Exception as e:
         logger.critical(
-            "Unknown error %s in strategy_check_market %s %s"
-            % (e, strategy_check_market, market.market_id),
+            "Unknown error %s in %s (%s)" % (e, func.__name__, market.market_id),
             exc_info=True,
         )
         if config.raise_errors:
@@ -213,21 +215,34 @@ def call_check_market(
     return False
 
 
-def call_process_market_book(
-    strategy_process_market_book: Callable, market, market_book: MarketBook
-) -> None:
+def call_middleware_error_handling(middleware, market) -> None:
     try:
-        strategy_process_market_book(market, market_book)
+        middleware(market)
     except FlumineException as e:
         logger.error(
-            "FlumineException %s in strategy_process_market_book %s %s"
-            % (e, strategy_process_market_book, market.market_id),
+            "FlumineException %s in %s (%s)" % (e, middleware, market.market_id),
             exc_info=True,
         )
     except Exception as e:
         logger.critical(
-            "Unknown error %s in strategy_process_market_book %s %s"
-            % (e, strategy_process_market_book, market.market_id),
+            "Unknown error %s in %s (%s)" % (e, middleware, market.market_id),
+            exc_info=True,
+        )
+        if config.raise_errors:
+            raise
+
+
+def call_process_orders_error_handling(strategy, market, strategy_orders: list) -> None:
+    try:
+        strategy.process_orders(market, strategy_orders)
+    except FlumineException as e:
+        logger.error(
+            "FlumineException %s in %s (%s)" % (e, strategy, market.market_id),
+            exc_info=True,
+        )
+    except Exception as e:
+        logger.critical(
+            "Unknown error %s in %s (%s)" % (e, strategy, market.market_id),
             exc_info=True,
         )
         if config.raise_errors:

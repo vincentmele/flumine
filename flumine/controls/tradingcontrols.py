@@ -56,6 +56,8 @@ class OrderValidation(BaseControl):
             self._on_error(order, "Order liability is None")
         elif order.order_type.liability <= 0:
             self._on_error(order, "Order liability is less than 0")
+        elif order.order_type.liability != round(order.order_type.liability, 2):
+            self._on_error(order, "Order liability has more than 2dp")
 
     def _validate_betfair_min_size(self, order, order_type):
         client = self.flumine.client
@@ -96,6 +98,24 @@ class OrderValidation(BaseControl):
                 )
 
 
+class MarketValidation(BaseControl):
+    """
+    Validates market is open for orders
+    """
+
+    NAME = "MARKET_VALIDATION"
+
+    def _validate(self, order: BaseOrder, package_type: OrderPackageType) -> None:
+        if order.EXCHANGE == ExchangeType.BETFAIR:
+            self._validate_betfair_market_status(order)
+
+    def _validate_betfair_market_status(self, order):
+        market = self.flumine.markets.markets.get(order.market_id)
+        if market and market.market_book.status != "OPEN":
+            self._on_error(order, "Market is not open")
+            order.executable()
+
+
 class StrategyExposure(BaseControl):
 
     """
@@ -119,7 +139,7 @@ class StrategyExposure(BaseControl):
 
         if package_type in (
             OrderPackageType.PLACE,
-            OrderPackageType.REPLACE,  # todo potential bug?
+            OrderPackageType.REPLACE,
         ):
             strategy = order.trade.strategy
             if order.order_type.ORDER_TYPE == OrderTypes.LIMIT:
@@ -147,8 +167,13 @@ class StrategyExposure(BaseControl):
 
             # per selection
             market = self.flumine.markets.markets[order.market_id]
+            if package_type == OrderPackageType.REPLACE:
+                exclusion = order
+            else:
+                exclusion = None
+
             current_exposures = market.blotter.get_exposures(
-                strategy, lookup=order.lookup
+                strategy, lookup=order.lookup, exclusion=exclusion
             )
             """
             We use -min(...) in the below, as "worst_possible_profit_on_X" will be negative if the position is

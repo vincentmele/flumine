@@ -1,7 +1,7 @@
 import unittest
 from unittest import mock
 
-from flumine.baseflumine import BaseFlumine
+from flumine.baseflumine import BaseFlumine, FlumineException
 
 
 class BaseFlumineTest(unittest.TestCase):
@@ -15,7 +15,7 @@ class BaseFlumineTest(unittest.TestCase):
         self.assertFalse(self.base_flumine._running)
         self.assertEqual(self.base_flumine._market_middleware, [])
         self.assertEqual(self.base_flumine._logging_controls, [])
-        self.assertEqual(len(self.base_flumine.trading_controls), 2)
+        self.assertEqual(len(self.base_flumine.trading_controls), 3)
         self.assertEqual(self.base_flumine._workers, [])
 
     @mock.patch("flumine.baseflumine.SimulatedMiddleware")
@@ -67,7 +67,7 @@ class BaseFlumineTest(unittest.TestCase):
     def test_add_trading_control(self):
         mock_control = mock.Mock()
         self.base_flumine.add_trading_control(mock_control)
-        self.assertEqual(len(self.base_flumine.trading_controls), 3)
+        self.assertEqual(len(self.base_flumine.trading_controls), 4)
 
     def test_add_market_middleware(self):
         mock_middleware = mock.Mock()
@@ -189,6 +189,32 @@ class BaseFlumineTest(unittest.TestCase):
         mock_event = mock.Mock()
         self.base_flumine._process_custom_event(mock_event)
         mock_event.callback.assert_called_with(self.base_flumine, mock_event)
+
+    def test__process_custom_event_flu_error(self):
+        mock_market = mock.Mock()
+        self.base_flumine.markets = [mock_market]
+        mock_event = mock.Mock()
+        mock_event.callback.side_effect = FlumineException()
+        self.base_flumine._process_custom_event(mock_event)
+        mock_event.callback.assert_called_with(self.base_flumine, mock_event)
+
+    def test__process_custom_event_error(self):
+        mock_market = mock.Mock()
+        self.base_flumine.markets = [mock_market]
+        mock_event = mock.Mock()
+        mock_event.callback.side_effect = ValueError()
+        self.base_flumine._process_custom_event(mock_event)
+        mock_event.callback.assert_called_with(self.base_flumine, mock_event)
+
+    @mock.patch("flumine.baseflumine.config")
+    def test__process_custom_event_error_raise(self, mock_config):
+        mock_config.raise_errors = True
+        mock_market = mock.Mock()
+        self.base_flumine.markets = [mock_market]
+        mock_event = mock.Mock()
+        mock_event.callback.side_effect = ValueError()
+        with self.assertRaises(ValueError):
+            self.base_flumine._process_custom_event(mock_event)
 
     @mock.patch("flumine.baseflumine.BaseFlumine.info")
     @mock.patch("flumine.baseflumine.BaseFlumine.log_control")

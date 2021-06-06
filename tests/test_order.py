@@ -1,6 +1,7 @@
 import string
 import unittest
 import datetime
+import collections
 from unittest import mock
 
 from flumine.order.order import (
@@ -40,6 +41,8 @@ class BaseOrderTest(unittest.TestCase):
         self.assertEqual(self.order.status_log, [])
         self.assertIsNone(self.order.violation_msg)
         self.assertEqual(self.order.context, {1: 2})
+        self.assertEqual(self.order.notes, {})
+        self.assertIsNone(self.order.market_notes)
         self.assertIsNone(self.order.bet_id)
         self.assertIsNone(self.order.EXCHANGE)
         self.assertEqual(self.order.update_data, {})
@@ -91,20 +94,6 @@ class BaseOrderTest(unittest.TestCase):
     def test_replacing(self, mock__update_status):
         self.order.replacing()
         mock__update_status.assert_called_with(OrderStatus.REPLACING)
-
-    @mock.patch("flumine.order.order.BaseOrder._update_status")
-    def test_lapsed(self, mock__update_status):
-        self.order.update_data = {123: 456}
-        self.order.lapsed()
-        mock__update_status.assert_called_with(OrderStatus.LAPSED)
-        self.assertEqual(self.order.update_data, {})
-
-    @mock.patch("flumine.order.order.BaseOrder._update_status")
-    def test_voided(self, mock__update_status):
-        self.order.update_data = {123: 456}
-        self.order.voided()
-        mock__update_status.assert_called_with(OrderStatus.VOIDED)
-        self.assertEqual(self.order.update_data, {})
 
     @mock.patch("flumine.order.order.BaseOrder._update_status")
     def test_violation(self, mock__update_status):
@@ -182,8 +171,6 @@ class BaseOrderTest(unittest.TestCase):
         for s in [
             OrderStatus.EXECUTION_COMPLETE,
             OrderStatus.EXPIRED,
-            OrderStatus.VOIDED,
-            OrderStatus.LAPSED,
             OrderStatus.VIOLATION,
         ]:
             self.order.status = s
@@ -257,6 +244,12 @@ class BaseOrderTest(unittest.TestCase):
 
         self.order.sep = "O"
         self.assertEqual("my_name_hashO1234", self.order.customer_order_ref)
+
+    def test_notes_str(self):
+        self.order.notes = collections.OrderedDict({"1": 1, 2: "2", 3: 3, 4: "four"})
+        self.assertEqual(self.order.notes_str, "1,2,3,four")
+        self.order.notes = collections.OrderedDict()
+        self.assertEqual(self.order.notes_str, "")
 
 
 class BetfairOrderTest(unittest.TestCase):
@@ -536,6 +529,8 @@ class BetfairOrderTest(unittest.TestCase):
                     "elapsed_seconds_executable": None,
                 },
                 "runner_status": self.order.runner_status,
+                "market_notes": None,
+                "notes": "",
             },
         )
 

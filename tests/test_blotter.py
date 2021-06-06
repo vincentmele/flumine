@@ -14,6 +14,7 @@ class BlotterTest(unittest.TestCase):
         self.assertEqual(self.blotter.market_id, "1.23")
         self.assertEqual(self.blotter._orders, {})
         self.assertEqual(self.blotter._live_orders, [])
+        self.assertEqual(self.blotter._trades, {})
         self.assertEqual(self.blotter._strategy_orders, {})
         self.assertEqual(self.blotter._strategy_selection_orders, {})
 
@@ -43,7 +44,7 @@ class BlotterTest(unittest.TestCase):
         self.assertTrue(self.blotter.has_live_orders)
 
     def test_process_closed_market(self):
-        mock_market_book = mock.Mock()
+        mock_market_book = mock.Mock(number_of_winners=1)
         mock_runner = mock.Mock(selection_id=123, handicap=0.0)
         mock_market_book.runners = [mock_runner]
         mock_order = mock.Mock(selection_id=123, handicap=0.0)
@@ -107,6 +108,43 @@ class BlotterTest(unittest.TestCase):
         self.blotter["12345"] = mock_order
         self.assertEqual(
             self.blotter.get_exposures(mock_strategy, mock_order.lookup),
+            {
+                "matched_profit_if_lose": -2.0,
+                "matched_profit_if_win": 9.2,
+                "worst_possible_profit_on_lose": -2.0,
+                "worst_possible_profit_on_win": 9.2,
+                "worst_potential_unmatched_profit_if_lose": 0.0,
+                "worst_potential_unmatched_profit_if_win": 0.0,
+            },
+        )
+
+    def test_get_exposures_with_exclusion(self):
+        mock_strategy = mock.Mock()
+        mock_trade = mock.Mock(strategy=mock_strategy)
+        mock_order = mock.Mock(
+            trade=mock_trade,
+            lookup=(self.blotter.market_id, 123, 0),
+            side="BACK",
+            average_price_matched=5.6,
+            size_matched=2.0,
+            size_remaining=0.0,
+            order_type=LimitOrder(price=5.6, size=2.0),
+        )
+        mock_order_excluded = mock.Mock(
+            trade=mock_trade,
+            lookup=(self.blotter.market_id, 123, 0),
+            side="BACK",
+            average_price_matched=5.6,
+            size_matched=2.0,
+            size_remaining=0.0,
+            order_type=LimitOrder(price=5.6, size=2.0),
+        )
+        self.blotter["12345"] = mock_order
+        self.blotter["67890"] = mock_order_excluded
+        self.assertEqual(
+            self.blotter.get_exposures(
+                mock_strategy, mock_order.lookup, exclusion=mock_order_excluded
+            ),
             {
                 "matched_profit_if_lose": -2.0,
                 "matched_profit_if_win": 9.2,
@@ -349,6 +387,11 @@ class BlotterTest(unittest.TestCase):
         self.blotter._live_orders = ["test"]
         self.blotter.complete_order("test")
 
+    def test_has_trade(self):
+        self.assertFalse(self.blotter.has_trade("123"))
+        self.blotter._trades["123"].append(1)
+        self.assertTrue(self.blotter.has_trade("123"))
+
     def test__contains(self):
         self.blotter._orders = {"123": "test"}
         self.assertIn("123", self.blotter)
@@ -359,6 +402,7 @@ class BlotterTest(unittest.TestCase):
         self.blotter["123"] = mock_order
         self.assertEqual(self.blotter._orders, {"123": mock_order})
         self.assertEqual(self.blotter._live_orders, [mock_order])
+        self.assertEqual(self.blotter._trades, {mock_order.trade.id: [mock_order]})
         self.assertEqual(
             self.blotter._strategy_orders, {mock_order.trade.strategy: [mock_order]}
         )

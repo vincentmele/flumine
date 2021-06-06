@@ -35,6 +35,7 @@ class Blotter:
         self.market_id = market_id
         self._orders = {}  # {Order.id: Order}
         # cached lists/dicts for faster lookup
+        self._trades = defaultdict(list)  # {Trade.id: [Order,]}
         self._live_orders = []
         self._strategy_orders = defaultdict(list)
         self._strategy_selection_orders = defaultdict(list)
@@ -50,14 +51,17 @@ class Blotter:
         return self._strategy_selection_orders[(strategy, selection_id, handicap)]
 
     @property
-    def live_orders(self):
-        return iter(self._live_orders)
+    def live_orders(self) -> Iterable:
+        return iter(list(self._live_orders))
 
     @property
     def has_live_orders(self) -> bool:
         return bool(self._live_orders)
 
     def process_closed_market(self, market_book) -> None:
+        number_of_winners = len(
+            [runner for runner in market_book.runners if runner.status == "WINNER"]
+        )
         for order in self:
             for runner in market_book.runners:
                 if (order.selection_id, order.handicap) == (
@@ -65,6 +69,8 @@ class Blotter:
                     runner.handicap,
                 ):
                     order.runner_status = runner.status
+                    if number_of_winners > market_book.number_of_winners:
+                        order.number_of_dead_heat_winners = number_of_winners
 
     def process_cleared_orders(self, cleared_orders) -> list:
         for cleared_order in cleared_orders.orders:
@@ -89,13 +95,15 @@ class Blotter:
         )
         return max(exposure, 0.0)
 
-    def get_exposures(self, strategy, lookup: tuple) -> dict:
+    def get_exposures(self, strategy, lookup: tuple, exclusion=None) -> dict:
         """Returns strategy/selection exposures as a dict."""
         mb, ml = [], []  # matched bets, (price, size)
         ub, ul = [], []  # unmatched bets, (price, size)
         moc_win_liability = 0.0
         moc_lose_liability = 0.0
         for order in self.strategy_selection_orders(strategy, *lookup[1:]):
+            if order == exclusion:
+                continue
             if order.status == OrderStatus.VIOLATION:
                 continue
             if order.order_type.ORDER_TYPE == OrderTypes.LIMIT:
@@ -150,11 +158,15 @@ class Blotter:
     def has_order(self, customer_order_ref: str) -> bool:
         return customer_order_ref in self._orders
 
+    def has_trade(self, trade_id: str) -> bool:
+        return trade_id in self._trades
+
     __contains__ = has_order
 
     def __setitem__(self, customer_order_ref: str, order) -> None:
         self._orders[customer_order_ref] = order
         self._live_orders.append(order)
+        self._trades[order.trade.id].append(order)
         self._strategy_orders[order.trade.strategy].append(order)
         self._strategy_selection_orders[
             (order.trade.strategy, *order.lookup[1:])

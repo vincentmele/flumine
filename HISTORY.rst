@@ -3,6 +3,166 @@
 Release History
 ---------------
 
+1.19.4 (2021-06-03)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Updates simulation class to use config latencies
+
+1.19.3 (2021-06-03)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Set order to be executable after violating on market status  (@lunswor)
+
+1.19.2 (2021-06-03)
++++++++++++++++++++
+
+**Improvements**
+
+- Move simulated latencies to config (@lunswor)
+- Add control to validate market status  (@lunswor)
+
+**Bug Fixes**
+
+- MarketRecorder race condition on file load / remove txt only if aged
+
+**Libraries**
+
+- black upgraded to black==21.5b2
+
+1.19.1 (2021-05-27)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Prevent race condition between execution and order stream
+
+1.19.0 (2021-05-27)
++++++++++++++++++++
+
+**Improvements**
+
+- Process refactor to use current_order status (remove void/lapse to match betfair)
+- Examples improvements
+
+1.18.12 (2021-05-21)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Prevent race condition on executable/execution_complete and new orders
+
+1.18.11 (2021-05-20)
++++++++++++++++++++
+
+**Improvements**
+
+- Market recorder refactored to have a single processor thread to remove blocking
+
+**Bug Fixes**
+
+- Add order stream start delay and snap pickup
+- Missing update current order
+
+1.18.10 (2021-05-17)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Logging control fix, trade event not triggered
+
+1.18.9 (2021-05-17)
++++++++++++++++++++
+
+**Improvements**
+
+- Notes and market notes added to order (potential race condition fix on transaction)
+
+**Bug Fixes**
+
+- #433 Liability persistence types not checked for <= 2 decimal places (@petercoles)
+
+1.18.8 (2021-05-14)
++++++++++++++++++++
+
+**Improvements**
+
+- Simulation optimisations
+
+**Bug Fixes**
+
+- #173 dead heat profit calculation (@lunswor)
+- listenerKwargs inplay / MoC / SP orders fix (@jsphon)
+
+**Libraries**
+
+- black upgraded to 21.5b1
+
+1.18.7 (2021-05-10)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- #423 get_exposures() replace fix (@jsphon)
+
+1.18.6 (2021-05-06)
++++++++++++++++++++
+
+**Improvements**
+
+- Stream retry timeout bumped to 60s
+- Docs improved
+- get_file_md tuple handing (race stream)
+
+**Libraries**
+
+- black upgraded to 21.5b0
+- dependabot native added
+
+1.18.5 (2021-04-26)
++++++++++++++++++++
+
+**Improvements**
+
+- #121 simulation improvements and further validations
+
+**Libraries**
+
+- black upgraded to 21.4b0
+
+1.18.4 (2021-04-20)
++++++++++++++++++++
+
+**Bug Fixes**
+
+- Duplicate Trade logging handled and has_trade added to Blotter
+
+1.18.3 (2021-04-16)
++++++++++++++++++++
+
+**Improvements**
+
+- 503 errors logged as warnings to prevent duplicate log messages propagating through to services such as sentry.io
+
+**Bug Fixes**
+
+- MarketRecorder example updated to handle orjson/speed use
+
+1.18.2 (2021-04-12)
++++++++++++++++++++
+
+**Improvements**
+
+- #217 error handling improvements
+
+**Bug Fixes**
+
+- Blotter live orders mutable bugfix
+- MarketRecorder example clean up fix
+
 1.18.1 (2021-04-08)
 +++++++++++++++++++
 
@@ -23,7 +183,7 @@ Release History
 - #404 Multi market processing (concurrent event market processing)
 - strategy order placement depreciated (breaking change as per warning version 1.17.0)
 - strategy.log_validation_failures depreciated (breaking change as per warning version 1.17.7)
-- Cleared order added to order object on closure (@arch4672)
+- #185 Cleared order added to order object on closure (@arch4672)
 - gzip market catalogue data in marketrecorder.py example
 
 **Bug Fixes**

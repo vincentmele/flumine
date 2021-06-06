@@ -17,8 +17,13 @@ from .execution.betfairexecution import BetfairExecution
 from .execution.simulatedexecution import SimulatedExecution
 from .order.process import process_current_orders
 from .controls.clientcontrols import BaseControl, MaxTransactionCount
-from .controls.tradingcontrols import OrderValidation, StrategyExposure
+from .controls.tradingcontrols import (
+    OrderValidation,
+    StrategyExposure,
+    MarketValidation,
+)
 from .controls.loggingcontrols import LoggingControl
+from .exceptions import FlumineException
 from . import config, utils
 
 logger = logging.getLogger(__name__)
@@ -68,6 +73,7 @@ class BaseFlumine:
         self.trading_controls = []
         # add default controls (processed in order)
         self.add_trading_control(OrderValidation)
+        self.add_trading_control(MarketValidation)
         self.add_trading_control(StrategyExposure)
         # register default client controls (processed in order)
         self.add_client_control(MaxTransactionCount)
@@ -143,11 +149,13 @@ class BaseFlumine:
 
             # process middleware
             for middleware in self._market_middleware:
-                middleware(market)  # todo err handling?
+                utils.call_middleware_error_handling(middleware, market)
 
             for strategy in self.strategies:
-                if utils.call_check_market(strategy.check_market, market, market_book):
-                    utils.call_process_market_book(
+                if utils.call_strategy_error_handling(
+                    strategy.check_market, market, market_book
+                ):
+                    utils.call_strategy_error_handling(
                         strategy.process_market_book, market, market_book
                     )
 
@@ -210,22 +218,36 @@ class BaseFlumine:
 
     def _process_current_orders(self, event: events.CurrentOrdersEvent) -> None:
         # update state
-        process_current_orders(self.markets, self.strategies, event, self.log_control)
+        process_current_orders(
+            self.markets, self.strategies, event, self.log_control, self._add_market
+        )
         for market in self.markets:
             if market.closed is False:
                 for strategy in self.strategies:
                     strategy_orders = market.blotter.strategy_orders(strategy)
-                    strategy.process_orders(market, strategy_orders)
+                    utils.call_process_orders_error_handling(
+                        strategy, market, strategy_orders
+                    )
 
     def _process_custom_event(self, event: events.CustomEvent) -> None:
         try:
             event.callback(self, event)
+        except FlumineException as e:
+            logger.error(
+                "FlumineException error {0} in _process_custom_event {1}".format(
+                    e, event.callback
+                ),
+                exc_info=True,
+            )
         except Exception as e:
             logger.exception(
                 "Unknown error {0} in _process_custom_event {1}".format(
                     e, event.callback
-                )
+                ),
+                exc_info=True,
             )
+            if config.raise_errors:
+                raise
 
     def _process_close_market(self, event: events.CloseMarketEvent) -> None:
         market_book = event.event

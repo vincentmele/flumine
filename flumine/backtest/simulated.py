@@ -1,6 +1,6 @@
 import logging
 import datetime
-from typing import List
+from typing import List, Optional
 from betfairlightweight.resources.bettingresources import MarketBook, RunnerBook
 
 from .utils import (
@@ -59,31 +59,54 @@ class Simulated:
             )
 
     def place(
-        self, client, market_book: MarketBook, instruction: dict, bet_id: int
+        self, order_package, market_book: MarketBook, instruction: dict, bet_id: int
     ) -> SimulatedPlaceResponse:
         # simulates placeOrder request->matching->response
         # todo instruction/fillkill/timeInForce etc
-        # todo check marketVersion or reject entire package?
+        # validate market status
+        if market_book.status != "OPEN":
+            self.size_voided += self.size_remaining
+            return self._create_place_response(
+                None,
+                status="FAILURE",
+                error_code="ERROR_IN_ORDER",
+            )
 
+        # validate market version
         self.market_version = market_book.version
+        if (
+            order_package.market_version
+            and order_package.market_version["version"] != self.market_version
+        ):
+            self.size_voided += self.size_remaining
+            return self._create_place_response(
+                None,
+                status="FAILURE",
+                error_code="ERROR_IN_ORDER",
+            )
+
+        runner = self._get_runner(market_book)
+        # validate runner status
+        if runner.status == "REMOVED":
+            self.size_voided += self.size_remaining
+            return self._create_place_response(
+                None,
+                status="FAILURE",
+                error_code="RUNNER_REMOVED",
+            )
         if self.order.order_type.ORDER_TYPE == OrderTypes.LIMIT:
-            runner = self._get_runner(market_book)
-
-            if runner.status == "REMOVED":
-                return self._create_place_response(
-                    bet_id,
-                    status="FAILURE",
-                    error_code="RUNNER_REMOVED",
-                )
-
             available_to_back = get_price(runner.ex.available_to_back, 0) or 1.01
             available_to_lay = get_price(runner.ex.available_to_lay, 0) or 1000
             price = self.order.order_type.price
             size = self.order.order_type.size
             if self.order.side == "BACK":
-                if not client.best_price_execution and available_to_back > price:
+                if (
+                    not order_package.client.best_price_execution
+                    and available_to_back > price
+                ):
+                    self.size_lapsed += self.size_remaining
                     return self._create_place_response(
-                        bet_id,
+                        None,
                         status="FAILURE",
                         error_code="BET_LAPSED_PRICE_IMPROVEMENT_TOO_LARGE",
                     )
@@ -97,9 +120,13 @@ class Simulated:
                     return self._create_place_response(bet_id)
                 available = runner.ex.available_to_lay
             else:
-                if not client.best_price_execution and available_to_lay < price:
+                if (
+                    not order_package.client.best_price_execution
+                    and available_to_lay < price
+                ):
+                    self.size_lapsed += self.size_remaining
                     return self._create_place_response(
-                        bet_id,
+                        None,
                         status="FAILURE",
                         error_code="BET_LAPSED_PRICE_IMPROVEMENT_TOO_LARGE",
                     )
@@ -124,11 +151,23 @@ class Simulated:
             )
             return self._create_place_response(bet_id)
         else:
+            # validate BSP available, not reconciled and market not inplay
+            if (
+                market_book.market_definition.bsp_market is False
+                or market_book.bsp_reconciled is True
+                or market_book.inplay is True
+            ):
+                self.size_voided += self.size_remaining
+                return self._create_place_response(
+                    None,
+                    status="FAILURE",
+                    error_code="MARKET_NOT_OPEN_FOR_BSP_BETTING",
+                )
             return self._create_place_response(bet_id)
 
     def _create_place_response(
         self,
-        bet_id: int,
+        bet_id: Optional[int],
         status: str = "SUCCESS",
         order_status: str = None,
         error_code: str = None,
@@ -148,8 +187,13 @@ class Simulated:
             error_code=error_code,
         )
 
-    def cancel(self) -> SimulatedCancelResponse:
+    def cancel(self, market_book: MarketBook) -> SimulatedCancelResponse:
         # simulates cancelOrder request->cancel->response
+        if market_book.status != "OPEN":
+            return SimulatedCancelResponse(
+                status="FAILURE",
+                error_code="ERROR_IN_ORDER",
+            )
         if self.order.order_type.ORDER_TYPE == OrderTypes.LIMIT:
             _size_reduction = (
                 self.order.update_data.get("size_reduction") or self.size_remaining
@@ -166,11 +210,24 @@ class Simulated:
         else:
             return SimulatedCancelResponse(
                 status="FAILURE",
-                error_code="BET_ACTION_ERROR",  # todo ?
+                error_code="BET_ACTION_ERROR",
             )
 
-    def update(self, instruction: dict):
+    def update(
+        self, market_book: MarketBook, instruction: dict
+    ) -> SimulatedUpdateResponse:
         # simulates updateOrder request->update->response
+        if market_book.status != "OPEN":
+            return SimulatedUpdateResponse(
+                status="FAILURE",
+                error_code="ERROR_IN_ORDER",
+            )
+        # validate BSP available
+        if market_book.market_definition.persistence_enabled is False:
+            return SimulatedUpdateResponse(
+                status="FAILURE",
+                error_code="INVALID_PERSISTENCE_TYPE",
+            )
         if (
             self.order.order_type.ORDER_TYPE == OrderTypes.LIMIT
             and self.size_remaining > 0
@@ -180,7 +237,7 @@ class Simulated:
             )
             return SimulatedUpdateResponse(status="SUCCESS")
         else:
-            return SimulatedCancelResponse(
+            return SimulatedUpdateResponse(
                 status="FAILURE",
                 error_code="BET_ACTION_ERROR",
             )
@@ -232,7 +289,7 @@ class Simulated:
                         self.size_cancelled += round(self.size_remaining - size, 2)
                     else:  # lapse
                         self.size_lapsed += self.size_remaining
-                        self.order.lapsed()
+                        self.order.execution_complete()
                         return
             elif _order_type.ORDER_TYPE == OrderTypes.LIMIT_ON_CLOSE:
                 if self.side == "BACK":
@@ -332,10 +389,24 @@ class Simulated:
     @property
     def profit(self) -> float:
         if self.order.runner_status == "WINNER":
-            if self.side == "BACK":
-                return round((self.average_price_matched - 1) * self.size_matched, 2)
-            else:
-                return round((self.average_price_matched - 1) * -self.size_matched, 2)
+            number_of_dead_heat_winners = self.order.number_of_dead_heat_winners or 1
+            profit = (self.size_matched / number_of_dead_heat_winners) * (
+                self.average_price_matched - 1
+            )
+
+            if number_of_dead_heat_winners == 2:
+                profit = profit - (self.size_matched / number_of_dead_heat_winners)
+            elif number_of_dead_heat_winners > 2:
+                profit = profit - (
+                    self.size_matched
+                    * (number_of_dead_heat_winners - 1)
+                    / number_of_dead_heat_winners
+                )
+
+            if self.side == "LAY":
+                profit = -profit
+
+            return round(profit, 2)
         elif self.order.runner_status == "LOSER":
             if self.side == "BACK":
                 return -self.size_matched
@@ -346,16 +417,16 @@ class Simulated:
 
     @property
     def status(self) -> str:
-        if self.order.status.value in [
-            "EXECUTION_COMPLETE",
-            "EXPIRED",
-            "VOIDED",
-            "LAPSED",
-            "VIOLATION",
-        ]:
-            return "EXECUTION_COMPLETE"
+        if self.take_sp:
+            if self._bsp_reconciled:
+                return "EXECUTION_COMPLETE"
+            else:
+                return "EXECUTABLE"
         else:
-            return "EXECUTABLE"
+            if self.size_remaining:
+                return "EXECUTABLE"
+            else:
+                return "EXECUTION_COMPLETE"
 
     @property
     def info(self) -> dict:
